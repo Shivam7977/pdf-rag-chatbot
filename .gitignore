@@ -1,0 +1,14 @@
+venv/
+.venv/
+
+__pycache__/
+*.pyc
+*.pyo
+
+data/uploads/*
+data/chroma/*
+
+.env
+.env.*
+
+!.env.example

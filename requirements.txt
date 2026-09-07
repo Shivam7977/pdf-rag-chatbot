@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pymupdf
+langchain
+langchain-text-splitters
+chromadb
+sentence-transformers
+rank-bm25
+ollama
+python-multipart
+pydantic
+rank-bm25

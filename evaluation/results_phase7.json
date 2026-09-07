@@ -1,0 +1,50 @@
+{
+  "DENSE (baseline) | top-5": {
+    "strict_recall": 0.7666666666666667,
+    "strict_mrr": 0.6177777777777779,
+    "keyword_recall": 0.6,
+    "keyword_mrr": 0.4744444444444444
+  },
+  "DENSE + RERANKER | top-5": {
+    "strict_recall": 0.8666666666666667,
+    "strict_mrr": 0.6927777777777778,
+    "keyword_recall": 0.7,
+    "keyword_mrr": 0.6166666666666667
+  },
+  "HYBRID (BM25 + dense, RRF) | top-5": {
+    "strict_recall": 0.7666666666666667,
+    "strict_mrr": 0.5594444444444445,
+    "keyword_recall": 0.7333333333333333,
+    "keyword_mrr": 0.586111111111111
+  },
+  "HYBRID + RERANKER | top-5": {
+    "strict_recall": 0.9,
+    "strict_mrr": 0.6844444444444445,
+    "keyword_recall": 0.7,
+    "keyword_mrr": 0.6166666666666667
+  },
+  "DENSE (baseline) | top-10": {
+    "strict_recall": 0.8666666666666667,
+    "strict_mrr": 0.6294444444444445,
+    "keyword_recall": 0.7333333333333333,
+    "keyword_mrr": 0.49083333333333334
+  },
+  "DENSE + RERANKER | top-10": {
+    "strict_recall": 0.9,
+    "strict_mrr": 0.6964814814814815,
+    "keyword_recall": 0.8,
+    "keyword_mrr": 0.6314814814814814
+  },
+  "HYBRID (BM25 + dense, RRF) | top-10": {
+    "strict_recall": 0.9,
+    "strict_mrr": 0.5780952380952381,
+    "keyword_recall": 0.7666666666666667,
+    "keyword_mrr": 0.5908730158730158
+  },
+  "HYBRID + RERANKER | top-10": {
+    "strict_recall": 0.9666666666666667,
+    "strict_mrr": 0.6933333333333334,
+    "keyword_recall": 0.8,
+    "keyword_mrr": 0.6288888888888889
+  }
+}

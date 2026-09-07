@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF RAG Chatbot</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>PDF RAG Chatbot</h1>
+      <p class="subtitle">Ask questions about your uploaded documents</p>
+    </header>
+
+    <main id="chat-window" class="chat-window">
+      <div class="empty-state" id="empty-state">
+        Ask a question to get started.
+      </div>
+    </main>
+
+    <form id="chat-form" class="chat-input-row">
+      <input
+        id="question-input"
+        type="text"
+        placeholder="Ask a question about your documents..."
+        autocomplete="off"
+        required
+      />
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

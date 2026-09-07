@@ -1,0 +1,182 @@
+[
+  {
+    "question": "What are global South funds?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 1,
+    "expected_keywords": ["global South funds", "socioenvironmental justice", "locally led solutions"]
+  },
+  {
+    "question": "What happened at COP30 in Belém?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 1,
+    "expected_keywords": ["COP30", "Belém", "Brazil", "Global South House"]
+  },
+  {
+    "question": "What is the Global South House?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 2,
+    "expected_keywords": ["Global South House", "philanthropic networks"]
+  },
+  {
+    "question": "How much do Comuá Network members disburse annually?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 2,
+    "expected_keywords": ["Comuá Network", "Brazilian real", "BRL"]
+  },
+  {
+    "question": "How do global South funds reach excluded populations?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 3,
+    "expected_keywords": ["women", "Indigenous Peoples", "Afro-descendant", "LGBTQI+"]
+  },
+  {
+    "question": "What is participatory decision making in these funds?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 3,
+    "expected_keywords": ["participatory", "democratic structures", "community feedback"]
+  },
+  {
+    "question": "Why is there a lack of trust in global South funds?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 4,
+    "expected_keywords": ["lack of trust", "unequal distribution of risk", "mistrust"]
+  },
+  {
+    "question": "What barriers do accreditation processes create?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 4,
+    "expected_keywords": ["accreditation", "minimum budget thresholds"]
+  },
+  {
+    "question": "What alternative financing schemes are suggested?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 4,
+    "expected_keywords": ["bridge funding", "collaborative"]
+  },
+  {
+    "question": "Who are the authors of the global South funds briefing?",
+    "expected_source": "22744iied.pdf",
+    "expected_page": 4,
+    "expected_keywords": ["Paula Sevilla Núñez", "Alexandre Apsan Frediani"]
+  },
+  {
+    "question": "What is visual general intelligence (VGI)?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 1,
+    "expected_keywords": ["visual general intelligence", "vision-centered", "AGI"]
+  },
+  {
+    "question": "Why does Robert Geirhos believe video models will become visual foundation models?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 3,
+    "expected_keywords": ["generative video models", "web-scale data", "Veo 3"]
+  },
+  {
+    "question": "What is algorithmic creativity according to Aditi Raghunathan?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 4,
+    "expected_keywords": ["combinational creativity", "exploratory creativity", "coherent"]
+  },
+  {
+    "question": "What does Yuki Asano say about continual learning in visual systems?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 4,
+    "expected_keywords": ["continuously", "visual experience", "adaptive"]
+  },
+  {
+    "question": "What is Spatial AI according to Andrew Davison?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 8,
+    "expected_keywords": ["Spatial AI", "SLAM", "persistent representations"]
+  },
+  {
+    "question": "How does Yilun Du connect visual intelligence to embodiment?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 9,
+    "expected_keywords": ["embodied", "generative world models", "action"]
+  },
+  {
+    "question": "What structure should visual intelligence recover according to Shangzhe Wu and Jiajun Wu?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 11,
+    "expected_keywords": ["entities", "intrinsics", "extrinsics", "relations", "dynamics"]
+  },
+  {
+    "question": "What does Zhuang Liu say about why vision looks less central today?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 12,
+    "expected_keywords": ["human vision", "strong baseline", "symbolic units"]
+  },
+  {
+    "question": "What are the three complementary learning objectives Kataoka et al. propose?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 14,
+    "expected_keywords": ["sequential prediction", "open-ended generation", "reconstruction"]
+  },
+  {
+    "question": "What is David Fouhey's perspective on visual intelligence and scientific discovery?",
+    "expected_source": "paper1.pdf",
+    "expected_page": 7,
+    "expected_keywords": ["scientific discovery", "supervision scale", "data-hungry"]
+  },
+  {
+    "question": "What is visual prompt engineering (VIPE)?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 1,
+    "expected_keywords": ["visual prompt engineering", "VIPE", "image editing model"]
+  },
+  {
+    "question": "What are the three steps of the VIPE pipeline?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 2,
+    "expected_keywords": ["ideator", "editor", "filter"]
+  },
+  {
+    "question": "What is the VPCT dataset used for?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 3,
+    "expected_keywords": ["VPCT", "ball", "buckets", "physics"]
+  },
+  {
+    "question": "What did the unnatural textures ablation reveal?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 4,
+    "expected_keywords": ["unnatural textures", "3D", "realism"]
+  },
+  {
+    "question": "What is Atomic Concept Editing (ACE)?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 6,
+    "expected_keywords": ["Atomic Concept Editing", "ACE", "atomic edit"]
+  },
+  {
+    "question": "How does visual prompt engineering compare to test-time scaling?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 6,
+    "expected_keywords": ["test-time scaling", "self-consistency", "cost-effective"]
+  },
+  {
+    "question": "Why does visual prompt engineering help video models?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 10,
+    "expected_keywords": ["realism bias", "domain gap", "scene consistency"]
+  },
+  {
+    "question": "What is the realism bias in video models?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 11,
+    "expected_keywords": ["realism bias", "photorealistic", "abstract"]
+  },
+  {
+    "question": "Does visual prompt engineering help native image generation models?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 8,
+    "expected_keywords": ["Nano Banana", "image generation models"]
+  },
+  {
+    "question": "What is a key limitation of visual prompt engineering mentioned in the paper?",
+    "expected_source": "paper2.pdf",
+    "expected_page": 11,
+    "expected_keywords": ["image editing model", "quality", "cost overhead"]
+  }
+]
