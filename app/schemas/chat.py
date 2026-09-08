@@ -2,12 +2,10 @@ from pydantic import BaseModel
 
 
 class ChatRequest(BaseModel):
+    chat_session_id: str
     question: str
-    # Filenames (matching the "source" metadata field on each chunk) that this
-    # chat session has uploaded so far. Retrieval is restricted to only these
-    # documents — this is what gives each session its own scoped context,
-    # instead of searching every PDF ever uploaded to the app.
-    sources: list[str] = []
+    # "sources" (filenames) removed — chat_session_id alone now scopes
+    # retrieval, since every chunk is tagged with the session that uploaded it.
 
 
 class SourceChunk(BaseModel):

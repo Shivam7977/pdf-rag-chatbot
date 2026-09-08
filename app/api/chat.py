@@ -1,64 +1,84 @@
 import json
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from datetime import datetime
+
+from app.db.database import get_db, SessionLocal
+from app.db import models
 from app.schemas.chat import ChatRequest
 from app.services.retriever import retrieve_chunks
 from app.services.llm import generate_answer
 
 router = APIRouter()
 
-# Same guardrail threshold and message as the non-streaming version (Phase 8).
-# Cross-encoder scores are unbounded logits — roughly: >0 relevant, <0 not.
 RERANK_CONFIDENCE_THRESHOLD = -3.0
 NO_ANSWER_MESSAGE = "I couldn't find this in the uploaded documents."
 
 
 def sse_event(event: str, data: dict) -> str:
-    """Formats one Server-Sent Event block: 'event: X\\ndata: {...}\\n\\n'."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def stream_chat_response(question: str, sources: list | None = None):
-    chunks = retrieve_chunks(question, top_k=5, sources=sources)
-
-    # Guardrail: same logic as Phase 8, but now the "not found" message is
-    # streamed word-by-word too, so the frontend UX stays consistent whether
-    # the answer came from the LLM or from the guardrail short-circuit.
-    if not chunks or chunks[0]["rerank_score"] < RERANK_CONFIDENCE_THRESHOLD:
-        for word in NO_ANSWER_MESSAGE.split(" "):
-            yield sse_event("token", {"content": word + " "})
-        yield sse_event("done", {})
-        yield sse_event("sources", {"sources": []})
-        return
-
+def stream_chat_response(question: str, chat_session_id: str):
+    # Own DB session — NOT the one injected into the route function, because
+    # that one closes as soon as the route returns the StreamingResponse
+    # object, before this generator has actually finished streaming.
+    db = SessionLocal()
     try:
-        for token in generate_answer(question, chunks):
-            yield sse_event("token", {"content": token})
+        chunks = retrieve_chunks(question, chat_session_id, db, top_k=5)
 
-        yield sse_event("done", {})
+        def save_message(role: str, content: str, sources_json: str):
+            db.add(models.Message(chat_session_id=chat_session_id, role=role, content=content, sources_json=sources_json))
+            session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
+            if session:
+                session.last_active_at = datetime.utcnow()
+            db.commit()
 
-        # Sources are sent only at the end — retrieval already finished
-        # before generation started, so there's no reason to send them early.
-        # Dedupe by (source, page): multiple retrieved chunks can come from
-        # the same page, but the UI only needs to show each page once.
-        seen = set()
-        sources_out = []
-        for c in chunks:
-            key = (c["source"], c["page"])
-            if key in seen:
-                continue
-            seen.add(key)
-            sources_out.append({"page": c["page"], "source": c["source"], "text": c["text"][:200]})
+        save_message("user", question, "[]")
 
-        yield sse_event("sources", {"sources": sources_out})
+        if not chunks or chunks[0]["rerank_score"] < RERANK_CONFIDENCE_THRESHOLD:
+            for word in NO_ANSWER_MESSAGE.split(" "):
+                yield sse_event("token", {"content": word + " "})
+            yield sse_event("done", {})
+            yield sse_event("sources", {"sources": []})
+            save_message("assistant", NO_ANSWER_MESSAGE, "[]")
+            return
 
-    except Exception as e:
-        yield sse_event("error", {"message": str(e)})
+        answer_text = ""
+        try:
+            for token in generate_answer(question, chunks):
+                answer_text += token
+                yield sse_event("token", {"content": token})
+
+            yield sse_event("done", {})
+
+            seen = set()
+            sources_out = []
+            for c in chunks:
+                key = (c["source"], c["page"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                sources_out.append({"page": c["page"], "source": c["source"], "text": c["text"][:200]})
+
+            yield sse_event("sources", {"sources": sources_out})
+            save_message("assistant", answer_text, json.dumps(sources_out))
+
+        except Exception as e:
+            yield sse_event("error", {"message": str(e)})
+            save_message("assistant", f"[error] {str(e)}", "[]")
+    finally:
+        db.close()
 
 
 @router.post("/chat")
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, db: Session = Depends(get_db)):
+    session = db.query(models.ChatSession).filter(models.ChatSession.id == request.chat_session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found. Start one via /auth/guest or /chats.")
+
     return StreamingResponse(
-        stream_chat_response(request.question, sources=request.sources),
-        media_type="text/event-stream"
+        stream_chat_response(request.question, request.chat_session_id),
+        media_type="text/event-stream",
     )
