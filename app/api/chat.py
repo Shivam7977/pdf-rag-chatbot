@@ -18,8 +18,8 @@ def sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def stream_chat_response(question: str):
-    chunks = retrieve_chunks(question, top_k=5)
+def stream_chat_response(question: str, sources: list | None = None):
+    chunks = retrieve_chunks(question, top_k=5, sources=sources)
 
     # Guardrail: same logic as Phase 8, but now the "not found" message is
     # streamed word-by-word too, so the frontend UX stays consistent whether
@@ -42,15 +42,15 @@ def stream_chat_response(question: str):
         # Dedupe by (source, page): multiple retrieved chunks can come from
         # the same page, but the UI only needs to show each page once.
         seen = set()
-        sources = []
+        sources_out = []
         for c in chunks:
             key = (c["source"], c["page"])
             if key in seen:
                 continue
             seen.add(key)
-            sources.append({"page": c["page"], "source": c["source"], "text": c["text"][:200]})
+            sources_out.append({"page": c["page"], "source": c["source"], "text": c["text"][:200]})
 
-        yield sse_event("sources", {"sources": sources})
+        yield sse_event("sources", {"sources": sources_out})
 
     except Exception as e:
         yield sse_event("error", {"message": str(e)})
@@ -59,6 +59,6 @@ def stream_chat_response(question: str):
 @router.post("/chat")
 def chat(request: ChatRequest):
     return StreamingResponse(
-        stream_chat_response(request.question),
+        stream_chat_response(request.question, sources=request.sources),
         media_type="text/event-stream"
     )

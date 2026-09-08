@@ -23,8 +23,8 @@ def _chunk_key(source: str, page, text: str) -> str:
     return f"{source}|{page}|{text[:80]}"
 
 
-def _dense_search(query: str, top_k: int = 20):
-    results = query_collection(query, top_k=top_k)
+def _dense_search(query: str, top_k: int = 20, sources: list | None = None):
+    results = query_collection(query, top_k=top_k, sources=sources)
     documents = results["documents"][0]
     metadatas = results["metadatas"][0]
 
@@ -56,7 +56,7 @@ def reciprocal_rank_fusion(dense_results, bm25_results, top_k: int = 20):
     return [chunk_lookup[key] for key, _ in ranked]
 
 
-def hybrid_search(query: str, top_k: int = 20):
-    dense_results = _dense_search(query, top_k=20)
-    bm25_results = bm25_search(query, top_k=20)
+def hybrid_search(query: str, top_k: int = 20, sources: list | None = None):
+    dense_results = _dense_search(query, top_k=20, sources=sources)
+    bm25_results = bm25_search(query, top_k=20, sources=sources)
     return reciprocal_rank_fusion(dense_results, bm25_results, top_k=top_k)

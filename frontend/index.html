@@ -1,35 +1,206 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF RAG Chatbot</title>
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DocQuery — Ask your PDFs, with sources</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
-    <header class="app-header">
-      <h1>PDF RAG Chatbot</h1>
-      <p class="subtitle">Ask questions about your uploaded documents</p>
-    </header>
 
-    <main id="chat-window" class="chat-window">
-      <div class="empty-state" id="empty-state">
-        Ask a question to get started.
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <span class="logo">DocQuery</span>
+      <nav class="nav-links">
+        <a href="#how-it-works">How it works</a>
+        <a href="#features">Features</a>
+      </nav>
+      <a href="#demo" class="btn btn-ghost btn-sm">Try it</a>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-inner">
+        <h1 class="hero-title">Ask your documents.<br>Get answers with sources.</h1>
+        <p class="hero-sub">Upload a PDF, ask a question in plain language, and get an answer built from the exact passages it came from — not a guess.</p>
+        <div class="hero-actions">
+          <a href="#demo" class="btn btn-primary">Try with your PDF</a>
+          <a href="#how-it-works" class="btn btn-text">See how it works ↓</a>
+        </div>
       </div>
-    </main>
+    </section>
 
-    <form id="chat-form" class="chat-input-row">
-      <input
-        id="question-input"
-        type="text"
-        placeholder="Ask a question about your documents..."
-        autocomplete="off"
-        required
-      />
-      <button type="submit" id="send-btn">Send</button>
-    </form>
-  </div>
+    <!-- CAPABILITY STRIP -->
+    <section class="capability-strip">
+      <div class="wrap capability-inner">
+        <span class="cap-item">Hybrid Search</span>
+        <span class="cap-dot">·</span>
+        <span class="cap-item">Reranked Results</span>
+        <span class="cap-dot">·</span>
+        <span class="cap-item">Streaming Answers</span>
+        <span class="cap-dot">·</span>
+        <span class="cap-item">Cited Sources</span>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how-it-works" id="how-it-works">
+      <div class="wrap">
+        <h2 class="section-title">How it works</h2>
+        <ol class="steps">
+          <li class="step">
+            <span class="step-num">01</span>
+            <div>
+              <h3>Upload</h3>
+              <p>Drop in a PDF. It's parsed and split into passages behind the scenes.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-num">02</span>
+            <div>
+              <h3>Index</h3>
+              <p>Each passage is embedded and indexed for both keyword and meaning-based search.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-num">03</span>
+            <div>
+              <h3>Ask</h3>
+              <p>Ask a question the way you'd ask a person. The answer streams back in real time.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step-num">04</span>
+            <div>
+              <h3>Cite</h3>
+              <p>Every answer links back to the exact document and page it was drawn from.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- LIVE DEMO -->
+    <section class="demo" id="demo">
+      <div class="wrap">
+        <h2 class="section-title">Try it</h2>
+
+        <div class="demo-grid">
+
+          <!-- Upload / Key topics panel -->
+          <div class="panel panel-topics">
+            <div class="panel-header">
+              <span class="panel-eyebrow">Document</span>
+              <h3>Upload a PDF</h3>
+            </div>
+
+            <div class="dropzone" id="dropzone">
+              <input type="file" id="file-input" accept="application/pdf" hidden />
+              <p class="dropzone-text" id="dropzone-text">Tap to choose a PDF, or drag one in</p>
+              <p class="dropzone-file" id="dropzone-filename"></p>
+            </div>
+
+            <div class="upload-status" id="upload-status" hidden></div>
+
+            <div class="topics-block" id="topics-block" hidden>
+              <p class="panel-eyebrow">Key topics found</p>
+              <ul class="topic-chips" id="topic-chips"></ul>
+            </div>
+          </div>
+
+          <!-- Chat panel -->
+          <div class="panel panel-chat">
+            <div class="panel-header">
+              <span class="panel-eyebrow">Assistant</span>
+              <h3>Ask a question</h3>
+              <span class="status-pill" id="chat-status">Waiting for a document</span>
+            </div>
+
+            <div class="chat-log" id="chat-log">
+              <div class="chat-empty" id="chat-empty">
+                Upload a PDF above, then ask something like "What does this document conclude?"
+              </div>
+            </div>
+
+            <form class="chat-input-row" id="chat-form">
+              <input
+                type="text"
+                id="chat-input"
+                class="chat-input"
+                placeholder="Ask about your document…"
+                autocomplete="off"
+                disabled
+              />
+              <button type="submit" class="chat-send" id="chat-send" disabled aria-label="Send">
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M2 10L17 2L11 17L8.5 11.5L2 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+              </button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features" id="features">
+      <div class="wrap">
+        <h2 class="section-title">What's under the hood</h2>
+        <div class="feature-grid">
+
+          <div class="feature-card">
+            <h3>Hybrid Search</h3>
+            <p>Combines keyword matching with meaning-based search so acronyms and exact terms are never missed.</p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Reranked Results</h3>
+            <p>A second pass re-orders the best-matching passages before they're used to answer, improving accuracy.</p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Streaming Answers</h3>
+            <p>Answers appear word by word as they're generated, instead of a long wait for a full response.</p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Page-Level Citations</h3>
+            <p>Every answer is followed by the document and page number it was actually drawn from.</p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Hallucination Guardrails</h3>
+            <p>If the document doesn't contain an answer, it says so — instead of making one up.</p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Multi-Document Support</h3>
+            <p>Upload more than one PDF and ask questions that span across all of them.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER CTA -->
+    <section class="footer-cta">
+      <div class="wrap footer-cta-inner">
+        <h2>Have a document you need answers from?</h2>
+        <a href="#demo" class="btn btn-primary">Try it now</a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>DocQuery</span>
+    </div>
+  </footer>
 
   <script src="app.js"></script>
 </body>

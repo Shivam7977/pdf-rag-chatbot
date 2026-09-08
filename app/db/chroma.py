@@ -32,13 +32,22 @@ def add_chunks(chunks: list):
     return len(chunks)
 
 
-def query_collection(query_text: str, top_k: int = 5):
+def query_collection(query_text: str, top_k: int = 5, sources: list | None = None):
+    """
+    sources: optional list of filenames to restrict the search to (matches
+    the "source" metadata field). Pass None or [] to search everything —
+    but for session-scoped chat, the caller should always pass the current
+    session's uploaded filenames.
+    """
     collection = get_collection()
     query_embedding = embed_texts([query_text])[0]
 
+    where_filter = {"source": {"$in": sources}} if sources else None
+
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=top_k
+        n_results=top_k,
+        where=where_filter
     )
     return results
 

@@ -6,7 +6,8 @@ So this module builds an index once from whatever's in Chroma, and caches it
 to disk (data/bm25_index.pkl) so we don't re-tokenize 600+ chunks every query.
 
 IMPORTANT: rebuild this manually after ingesting new docs, by calling
-build_bm25_index(force_rebuild=True) — e.g. at the end of evaluation/ingest_all.py.
+build_bm25_index(force_rebuild=True) — e.g. at the end of evaluation/ingest_all.py
+and now also inside app/api/documents.py after each upload.
 It does NOT auto-rebuild on server startup (kept explicit on purpose, see
 Phase 7 notes: avoids slow reloads during `uvicorn --reload` dev loop).
 """
@@ -62,26 +63,43 @@ def build_bm25_index(force_rebuild: bool = False):
     return index_data
 
 
-def bm25_search(query: str, top_k: int = 20):
+def bm25_search(query: str, top_k: int = 20, sources: list | None = None):
     """
     Returns top_k chunks as dicts shaped like the rest of the pipeline expects:
     {"text": ..., "page": ..., "source": ..., "chunk_id": ..., "bm25_rank": ...}
+
+    sources: optional list of filenames to restrict results to. The BM25 index
+    itself still covers the whole corpus (rebuilding it per-query would be slow),
+    but we skip any ranked result whose "source" isn't in this list — so a
+    session only ever sees chunks from documents it uploaded.
     """
     index_data = build_bm25_index()  # served from cache unless force_rebuild was called elsewhere
     bm25 = index_data["bm25"]
     tokenized_query = _tokenize(query)
 
     scores = bm25.get_scores(tokenized_query)
-    ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+    # Rank the FULL corpus first, then filter — slicing top_k before filtering
+    # would risk returning fewer than top_k (or zero) results once restricted
+    # to a small session's documents.
+    ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+
+    allowed = set(sources) if sources else None
 
     results = []
-    for rank, idx in enumerate(ranked_indices):
+    for idx in ranked_indices:
         meta = index_data["metadatas"][idx]
+        if allowed is not None and meta["source"] not in allowed:
+            continue
+
         results.append({
             "text": index_data["documents"][idx],
             "page": meta["page"],
             "source": meta["source"],
             "chunk_id": index_data["chunk_ids"][idx],
-            "bm25_rank": rank + 1,
+            "bm25_rank": len(results) + 1,
         })
+
+        if len(results) >= top_k:
+            break
+
     return results
