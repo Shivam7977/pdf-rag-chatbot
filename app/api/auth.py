@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db import models
-from app.schemas.auth import SignupRequest, LoginRequest, GoogleLoginRequest, TokenResponse
+from app.schemas.auth import SignupRequest, LoginRequest, GoogleLoginRequest, SetPasswordRequest, TokenResponse
 from app.services.security import hash_password, verify_password, create_access_token, verify_google_token
 from app.services.cleanup import cleanup_stale_guests
+from app.services.email import send_welcome_email
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,6 +21,9 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    send_welcome_email(user.email)
+
     return TokenResponse(access_token=create_access_token(str(user.id)))
 
 
@@ -39,14 +44,19 @@ def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
 
     email, google_id = info["email"], info["sub"]
     user = db.query(models.User).filter(models.User.email == email).first()
+    is_new_user = False
     if not user:
         user = models.User(email=email, google_id=google_id)
         db.add(user)
         db.commit()
         db.refresh(user)
+        is_new_user = True
     elif not user.google_id:
         user.google_id = google_id
         db.commit()
+
+    if is_new_user:
+        send_welcome_email(user.email)
 
     return TokenResponse(access_token=create_access_token(str(user.id)))
 
@@ -59,3 +69,30 @@ def start_guest_session(db: Session = Depends(get_db)):
     db.commit()
     db.refresh(session)
     return {"chat_session_id": str(session.id)}
+
+
+@router.post("/set-password")
+def set_password(
+    payload: SetPasswordRequest,
+    user: models.User | None = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required.")
+    if user.password_hash:
+        raise HTTPException(status_code=400, detail="This account already has a password. Use the change-password flow instead.")
+
+    user.password_hash = hash_password(payload.password)
+    db.commit()
+    return {"status": "password set"}
+
+
+@router.get("/me")
+def get_current_user_info(user: models.User | None = Depends(get_current_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required.")
+    return {
+        "email": user.email,
+        "has_password": user.password_hash is not None,
+        "has_google": user.google_id is not None,
+    }

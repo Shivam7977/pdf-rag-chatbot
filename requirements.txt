@@ -16,3 +16,4 @@ passlib[bcrypt]
 python-jose[cryptography]
 google-auth
 email-validator
+resend
