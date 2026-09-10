@@ -9,6 +9,7 @@ from app.db import models
 from app.schemas.chat import ChatRequest
 from app.services.retriever import retrieve_chunks
 from app.services.llm import generate_answer
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
@@ -21,9 +22,9 @@ def sse_event(event: str, data: dict) -> str:
 
 
 def stream_chat_response(question: str, chat_session_id: str):
-    # Own DB session — NOT the one injected into the route function, because
-    # that one closes as soon as the route returns the StreamingResponse
-    # object, before this generator has actually finished streaming.
+    # Own DB session — the one injected into the route function closes as
+    # soon as the route returns the StreamingResponse object, before this
+    # generator has actually finished streaming.
     db = SessionLocal()
     try:
         chunks = retrieve_chunks(question, chat_session_id, db, top_k=5)
@@ -73,10 +74,20 @@ def stream_chat_response(question: str, chat_session_id: str):
 
 
 @router.post("/chat")
-def chat(request: ChatRequest, db: Session = Depends(get_db)):
+def chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    user: models.User | None = Depends(get_current_user),
+):
     session = db.query(models.ChatSession).filter(models.ChatSession.id == request.chat_session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found. Start one via /auth/guest or /chats.")
+
+    # A chat owned by a registered user can only be used by that same user.
+    # A guest chat (user_id is None) has no owner to check against — the
+    # unguessable chat_session_id itself is what scopes access to it.
+    if session.user_id is not None and (not user or session.user_id != user.id):
+        raise HTTPException(status_code=403, detail="This chat belongs to another account.")
 
     return StreamingResponse(
         stream_chat_response(request.question, request.chat_session_id),

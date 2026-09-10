@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Log in — DocQuery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="auth-body">
+
+  <div class="auth-card">
+    <a href="index.html" class="auth-logo">DocQuery</a>
+
+    <!-- Step 1: login / signup form -->
+    <div id="auth-step-form">
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab is-active" id="tab-login">Log in</button>
+        <button type="button" class="auth-tab" id="tab-signup">Sign up</button>
+      </div>
+
+      <form id="auth-form">
+        <input type="email" id="auth-email" placeholder="Email" required autocomplete="email" />
+        <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password" />
+        <div id="auth-error" class="auth-error" hidden></div>
+        <button type="submit" class="btn btn-primary auth-submit" id="auth-submit">Log in</button>
+      </form>
+
+      <div class="auth-divider"><span>or</span></div>
+
+      <div id="google-btn"></div>
+
+      <button type="button" class="btn btn-ghost auth-guest" id="guest-btn">Continue as Guest</button>
+    </div>
+
+    <!-- Step 2: enter verification code (shown only after signup) -->
+    <div id="auth-step-verify" hidden>
+      <p class="auth-verify-text">We sent a 6-digit code to <span id="verify-email-display"></span>. Enter it below.</p>
+      <form id="verify-form">
+        <input type="text" id="verify-code" placeholder="000000" maxlength="6" inputmode="numeric" required />
+        <div id="verify-error" class="auth-error" hidden></div>
+        <button type="submit" class="btn btn-primary auth-submit">Verify</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

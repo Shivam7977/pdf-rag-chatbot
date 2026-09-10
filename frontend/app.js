@@ -1,21 +1,20 @@
 /* ============================================
-   CONFIG
-   Adjust these to match your actual FastAPI routes
-   (app/api/documents.py and app/api/chat.py).
+   AUTH GUARD — no chat_session_id means the user
+   never went through login.html, send them back.
    ============================================ */
+const CHAT_SESSION_ID = localStorage.getItem("docquery_chat_session_id");
+const TOKEN = localStorage.getItem("docquery_token"); // null for guests
+
+if (!CHAT_SESSION_ID) {
+  window.location.href = "login.html";
+}
+
 const CONFIG = {
-  UPLOAD_ENDPOINT: "/api/documents/upload", // matches app/api/documents.py
-  CHAT_ENDPOINT: "/chat",                   // matches app/api/chat.py's @router.post("/chat")
+  UPLOAD_ENDPOINT: "/api/documents/upload",
+  CHAT_ENDPOINT: "/chat",
 };
 
-/* ============================================
-   STATE
-   ============================================ */
 const state = {
-  // Every filename uploaded in THIS session (page load). Sent to the backend
-  // with each chat request so retrieval only searches these documents —
-  // not every PDF ever uploaded to the app.
-  uploadedSources: [],
   documentReady: false,
 };
 
@@ -27,8 +26,6 @@ const fileInput = document.getElementById("file-input");
 const dropzoneText = document.getElementById("dropzone-text");
 const dropzoneFilename = document.getElementById("dropzone-filename");
 const uploadStatus = document.getElementById("upload-status");
-const topicsBlock = document.getElementById("topics-block");
-const topicChips = document.getElementById("topic-chips");
 
 const chatStatus = document.getElementById("chat-status");
 const chatLog = document.getElementById("chat-log");
@@ -37,27 +34,32 @@ const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatSend = document.getElementById("chat-send");
 
+const accountPill = document.getElementById("account-pill");
+const logoutBtn = document.getElementById("logout-btn");
+
+accountPill.textContent = TOKEN ? "Logged in" : "Guest session";
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem("docquery_token");
+  localStorage.removeItem("docquery_chat_session_id");
+  window.location.href = "index.html";
+});
+
+function authHeaders(extra = {}) {
+  return TOKEN ? { ...extra, Authorization: `Bearer ${TOKEN}` } : extra;
+}
+
 /* ============================================
    UPLOAD
    ============================================ */
 dropzone.addEventListener("click", () => fileInput.click());
-
-dropzone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropzone.classList.add("is-dragover");
-});
-
-dropzone.addEventListener("dragleave", () => {
-  dropzone.classList.remove("is-dragover");
-});
-
+dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("is-dragover"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragover"));
 dropzone.addEventListener("drop", (e) => {
   e.preventDefault();
   dropzone.classList.remove("is-dragover");
   const file = e.dataTransfer.files[0];
   if (file) handleFile(file);
 });
-
 fileInput.addEventListener("change", () => {
   const file = fileInput.files[0];
   if (file) handleFile(file);
@@ -72,50 +74,29 @@ async function handleFile(file) {
   dropzoneFilename.textContent = file.name;
   dropzoneText.textContent = "Uploading…";
   showUploadStatus("", false);
-  hideElement(topicsBlock);
 
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("chat_session_id", CHAT_SESSION_ID);
 
   try {
     const res = await fetch(CONFIG.UPLOAD_ENDPOINT, {
       method: "POST",
+      headers: authHeaders(),
       body: formData,
     });
 
-    if (!res.ok) {
-      throw new Error(`Upload failed (${res.status})`);
-    }
-
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `Upload failed (${res.status})`);
 
-    // Adjust this field name if your upload response shape differs.
-    const uploadedFilename = data.filename ?? file.name;
-    if (!state.uploadedSources.includes(uploadedFilename)) {
-      state.uploadedSources.push(uploadedFilename);
-    }
     state.documentReady = true;
-
     dropzoneText.textContent = "Tap to add another PDF to this chat";
-    showUploadStatus(
-      state.uploadedSources.length > 1
-        ? `${state.uploadedSources.length} documents ready in this chat.`
-        : `"${file.name}" is indexed and ready.`,
-      false
-    );
-
-    if (Array.isArray(data.topics) && data.topics.length > 0) {
-      renderTopics(data.topics);
-    }
-
+    showUploadStatus(`"${file.name}" is indexed and ready.`, false);
     enableChat();
   } catch (err) {
     console.error(err);
     dropzoneText.textContent = "Tap to choose a PDF, or drag one in";
-    showUploadStatus(
-      "Couldn't upload that file. Check that the backend is running and CONFIG.UPLOAD_ENDPOINT is correct.",
-      true
-    );
+    showUploadStatus(err.message || "Couldn't upload that file.", true);
   }
 }
 
@@ -123,16 +104,6 @@ function showUploadStatus(message, isError) {
   uploadStatus.textContent = message;
   uploadStatus.hidden = !message;
   uploadStatus.classList.toggle("is-error", isError);
-}
-
-function renderTopics(topics) {
-  topicChips.innerHTML = "";
-  topics.forEach((topic) => {
-    const li = document.createElement("li");
-    li.textContent = topic;
-    topicChips.appendChild(li);
-  });
-  showElement(topicsBlock);
 }
 
 function enableChat() {
@@ -145,7 +116,6 @@ function enableChat() {
 
 /* ============================================
    CHAT — manual SSE parsing over fetch()
-   (POST is required, so EventSource can't be used)
    ============================================ */
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -163,7 +133,7 @@ chatForm.addEventListener("submit", async (e) => {
     await streamAnswer(message, assistantEl);
   } catch (err) {
     console.error(err);
-    setMessageText(assistantEl, "Something went wrong reaching the backend. Check CONFIG.CHAT_ENDPOINT.");
+    setMessageText(assistantEl, "Something went wrong reaching the backend.");
   } finally {
     stopStreamingCursor(assistantEl);
     chatInput.disabled = false;
@@ -173,19 +143,18 @@ chatForm.addEventListener("submit", async (e) => {
 });
 
 async function streamAnswer(message, assistantEl) {
-  // "sources" scopes retrieval to only the PDFs uploaded in this session —
-  // see app/schemas/chat.py.
   const res = await fetch(CONFIG.CHAT_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
+      chat_session_id: CHAT_SESSION_ID,
       question: message,
-      sources: state.uploadedSources,
     }),
   });
 
   if (!res.ok || !res.body) {
-    throw new Error(`Chat request failed (${res.status})`);
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `Chat request failed (${res.status})`);
   }
 
   const reader = res.body.getReader();
@@ -196,28 +165,17 @@ async function streamAnswer(message, assistantEl) {
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
-
     buffer += decoder.decode(value, { stream: true });
 
-    // SSE events are separated by a blank line
     const parts = buffer.split("\n\n");
-    buffer = parts.pop(); // keep the last, possibly incomplete, chunk
+    buffer = parts.pop();
 
     for (const part of parts) {
       const { event, data } = parseSSEEvent(part);
       if (!event || data === null) continue;
 
-      // Every event's data is a JSON object, per app/api/chat.py's sse_event():
-      //   token   -> {"content": "..."}
-      //   sources -> {"sources": [{page, source, text}, ...]}
-      //   error   -> {"message": "..."}
-      //   done    -> {}
       let payload;
-      try {
-        payload = JSON.parse(data);
-      } catch {
-        continue; // malformed event, skip it rather than crash the stream
-      }
+      try { payload = JSON.parse(data); } catch { continue; }
 
       if (event === "token") {
         answerText += payload.content ?? "";
@@ -226,8 +184,6 @@ async function streamAnswer(message, assistantEl) {
         renderSourceChips(assistantEl, payload.sources ?? []);
       } else if (event === "error") {
         setMessageText(assistantEl, payload.message || "The assistant couldn't answer that.");
-      } else if (event === "done") {
-        // no-op — cursor removal happens in the caller's finally block
       }
     }
   }
@@ -248,7 +204,6 @@ function parseSSEEvent(rawBlock) {
    ============================================ */
 function appendMessage(role, text, opts = {}) {
   chatEmpty.hidden = true;
-
   const el = document.createElement("div");
   el.className = `chat-message ${role}`;
   el.innerHTML = escapeHtml(text) + (opts.streaming ? '<span class="cursor"></span>' : "");
@@ -273,8 +228,7 @@ function renderSourceChips(el, sources) {
   sources.forEach((s) => {
     const chip = document.createElement("span");
     chip.className = "source-chip";
-    const label = s.page ? `${s.source} · p.${s.page}` : s.source;
-    chip.textContent = label;
+    chip.textContent = s.page ? `${s.source} · p.${s.page}` : s.source;
     wrap.appendChild(chip);
   });
   el.appendChild(wrap);
@@ -286,6 +240,3 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
-
-function showElement(el) { el.hidden = false; }
-function hideElement(el) { el.hidden = true; }

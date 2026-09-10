@@ -13,6 +13,7 @@ from app.services.vector_store import add_chunks
 from app.services.bm25_retriever import invalidate_bm25_index
 from app.services.cleanup import cleanup_stale_guests
 from app.config import MAX_UPLOAD_BYTES_PER_SESSION
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
@@ -25,12 +26,16 @@ def upload_document(
     chat_session_id: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user: models.User | None = Depends(get_current_user),
 ):
     cleanup_stale_guests(db)
 
     session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found. Start one via /auth/guest or /chats.")
+
+    if session.user_id is not None and (not user or session.user_id != user.id):
+        raise HTTPException(status_code=403, detail="This chat belongs to another account.")
 
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
@@ -47,13 +52,11 @@ def upload_document(
         shutil.copyfileobj(file.file, f)
 
     try:
-        pages = extract_text_from_pdf(str(save_path))
+        pages = extract_text_from_pdf(str(save_path), display_name=file.filename)
         if not pages:
             raise HTTPException(status_code=422, detail="No extractable text found in this PDF.")
 
         chunks = chunk_pages(pages)
-        # NOTE: confirm chunk_pages() tags each chunk's "source" as file.filename
-        # (the original name), not the on-disk save_path — check chunker.py.
         chunk_count = add_chunks(chunks, chat_session_id=chat_session_id, db=db)
         invalidate_bm25_index(chat_session_id)
 
@@ -61,6 +64,6 @@ def upload_document(
         session.last_active_at = datetime.utcnow()
         db.commit()
     finally:
-        save_path.unlink(missing_ok=True)  # only needed transiently for text extraction
+        save_path.unlink(missing_ok=True)
 
     return {"filename": file.filename, "chunks_indexed": chunk_count}

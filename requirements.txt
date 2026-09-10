@@ -17,3 +17,4 @@ python-jose[cryptography]
 google-auth
 email-validator
 resend
+bcrypt==4.0.1

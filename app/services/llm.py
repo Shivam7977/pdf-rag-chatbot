@@ -2,13 +2,6 @@ import ollama
 from app.config import LLM_PROVIDER
 
 def generate_answer(question: str, context_chunks: list):
-    """
-    Builds a grounded prompt from retrieved chunks and STREAMS the answer
-    token-by-token from the configured LLM provider (generator function).
-
-    Prompt/grounding rules are UNCHANGED from the non-streaming version —
-    only the delivery mechanism (yield vs return) changed for Phase 9.
-    """
     context_text = "\n\n".join(
         f"[Source: {c['source']}, Page {c['page']}]\n{c['text']}"
         for c in context_chunks
@@ -45,7 +38,11 @@ ANSWER:"""
         stream = ollama.chat(
             model="llama3.2",
             messages=[{"role": "user", "content": prompt}],
-            stream=True
+            stream=True,
+            # Low temperature — this is a fact-retrieval tool, not a creative
+            # writer. High randomness was causing the same question to get
+            # differently-phrased (and sometimes garbled) answers each time.
+            options={"temperature": 0.1}
         )
         for chunk in stream:
             content = chunk["message"]["content"]

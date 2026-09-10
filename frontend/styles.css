@@ -575,3 +575,111 @@ section {
   font-size: 0.85rem;
   color: var(--color-ink-muted);
 }
+
+/* ============================================
+   AUTH PAGES (login.html)
+   ============================================ */
+.auth-body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.auth-logo {
+  display: block;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: var(--space-6);
+}
+
+.auth-tabs {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-5);
+}
+.auth-tab {
+  flex: 1;
+  padding: var(--space-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+}
+.auth-tab.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+#auth-form, #verify-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+#auth-form input, #verify-form input {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.auth-submit { width: 100%; margin-top: var(--space-1); }
+
+.auth-error {
+  color: var(--color-error);
+  font-size: 0.85rem;
+}
+
+.auth-divider {
+  text-align: center;
+  color: var(--color-ink-muted);
+  font-size: 0.8rem;
+  margin: var(--space-5) 0;
+  position: relative;
+}
+.auth-divider::before, .auth-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 40%;
+  border-top: 1px solid var(--color-border);
+}
+.auth-divider::before { left: 0; }
+.auth-divider::after { right: 0; }
+
+#google-btn { display: flex; justify-content: center; margin-bottom: var(--space-4); }
+
+.auth-guest {
+  width: 100%;
+}
+
+.auth-verify-text {
+  color: var(--color-ink-muted);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-4);
+}
+
+/* ============================================
+   APP PAGE HEADER (app.html)
+   ============================================ */
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}

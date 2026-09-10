@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import jwt, JWTError
@@ -7,6 +8,8 @@ from google.auth.transport import requests as google_requests
 from app.config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_MINUTES, GOOGLE_CLIENT_ID
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+VERIFICATION_CODE_TTL_MINUTES = 15
 
 
 def hash_password(password: str) -> str:
@@ -31,5 +34,11 @@ def decode_access_token(token: str) -> str | None:
 
 
 def verify_google_token(token: str) -> dict:
-    """Returns the verified payload (email, sub, ...) or raises ValueError if invalid."""
     return google_id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID)
+
+
+def generate_verification_code() -> tuple[str, "datetime"]:
+    """Returns a 6-digit numeric code and its expiry timestamp."""
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    expires_at = datetime.utcnow() + timedelta(minutes=VERIFICATION_CODE_TTL_MINUTES)
+    return code, expires_at

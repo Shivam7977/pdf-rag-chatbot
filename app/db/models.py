@@ -6,8 +6,6 @@ from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from app.db.database import Base
 
-# all-MiniLM-L6-v2 (used in embeddings.py) outputs 384-dim vectors.
-# If your embeddings.py uses a different model, change this to match.
 EMBEDDING_DIM = 384
 
 
@@ -15,8 +13,11 @@ class User(Base):
     __tablename__ = "users"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False, index=True)
-    password_hash = Column(String, nullable=True)   # null if the user only ever used Google
+    password_hash = Column(String, nullable=True)
     google_id = Column(String, unique=True, nullable=True)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    verification_code = Column(String, nullable=True)
+    verification_code_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     chat_sessions = relationship("ChatSession", back_populates="user")
@@ -41,7 +42,7 @@ class Message(Base):
     __tablename__ = "messages"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     chat_session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
-    role = Column(String, nullable=False)  # "user" or "assistant"
+    role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     sources_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

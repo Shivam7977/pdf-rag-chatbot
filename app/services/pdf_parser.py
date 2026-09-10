@@ -1,19 +1,26 @@
 import pymupdf as fitz
 
-def extract_text_from_pdf(file_path: str):
+def extract_text_from_pdf(file_path: str, display_name: str | None = None):
     """
     Extracts text from a PDF, page by page, keeping track of
     which page each block of text came from (needed later for citations).
+
+    display_name: the filename to show in citations. Pass this explicitly
+    when file_path is a disk-saved path that doesn't match the user-facing
+    filename (e.g. documents.py prefixes it with chat_session_id to avoid
+    collisions on disk) — otherwise the citation would show the messy
+    on-disk name instead of the clean original filename.
+
     Returns a list of dicts: [{"text": ..., "page": ..., "source": ...}]
     """
     doc = fitz.open(file_path)
-    filename = file_path.split("\\")[-1].split("/")[-1]  # works on Windows and Unix paths
+    filename = display_name or file_path.split("\\")[-1].split("/")[-1]
 
     extracted_pages = []
 
     for page_number, page in enumerate(doc, start=1):
         text = page.get_text()
-        if text.strip():  # skip blank pages
+        if text.strip():
             extracted_pages.append({
                 "text": text,
                 "page": page_number,
@@ -25,7 +32,6 @@ def extract_text_from_pdf(file_path: str):
 
 
 if __name__ == "__main__":
-    # Quick manual test — run this file directly to check it works
     import sys
     test_file = sys.argv[1] if len(sys.argv) > 1 else None
     if not test_file:
