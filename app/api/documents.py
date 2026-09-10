@@ -47,9 +47,12 @@ def upload_document(
     if session.total_upload_bytes + file_size > MAX_UPLOAD_BYTES_PER_SESSION:
         raise HTTPException(status_code=413, detail="This chat has hit its 50MB storage limit. Start a new chat to upload more.")
 
+    file_bytes = file.file.read()
+    file.file.seek(0)
+
     save_path = UPLOAD_DIR / f"{chat_session_id}_{file.filename}"
     with open(save_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+        f.write(file_bytes)
 
     try:
         pages = extract_text_from_pdf(str(save_path), display_name=file.filename)
@@ -60,8 +63,18 @@ def upload_document(
         chunk_count = add_chunks(chunks, chat_session_id=chat_session_id, db=db)
         invalidate_bm25_index(chat_session_id)
 
+        # Store the raw PDF for later preview/download.
+        db.add(models.Document(
+            chat_session_id=chat_session_id,
+            filename=file.filename,
+            content_type=file.content_type,
+            data=file_bytes,
+        ))
+
         session.total_upload_bytes += file_size
         session.last_active_at = datetime.utcnow()
+        if not session.title or session.title == "New chat":
+            session.title = file.filename
         db.commit()
     finally:
         save_path.unlink(missing_ok=True)

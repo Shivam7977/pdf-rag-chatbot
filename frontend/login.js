@@ -1,7 +1,7 @@
-const API_BASE = ""; // same-origin; change if frontend is ever served separately from the API
+const API_BASE = "";
 const GOOGLE_CLIENT_ID = "156200876984-2egnbobauansfgn11lj06vtobqruhe3l.apps.googleusercontent.com";
 
-let mode = "login"; // "login" | "signup"
+let mode = "login";
 let pendingEmail = "";
 
 const tabLogin = document.getElementById("tab-login");
@@ -52,16 +52,10 @@ async function apiPost(path, body) {
   return data;
 }
 
-async function startAppSession(token) {
-  // Every login/signup/google flow ends the same way: we have a JWT, now
-  // create a fresh saved chat and hand off to app.html.
-  const res = await fetch(API_BASE + "/chats", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data = await res.json();
+function goToAppWithToken(token) {
   localStorage.setItem("docquery_token", token);
-  localStorage.setItem("docquery_chat_session_id", data.chat_session_id);
+  localStorage.removeItem("docquery_chat_session_id");
+  localStorage.removeItem("docquery_guest_mode");
   window.location.href = "app.html";
 }
 
@@ -74,7 +68,7 @@ authForm.addEventListener("submit", async (e) => {
   try {
     if (mode === "login") {
       const data = await apiPost("/auth/login", { email, password });
-      await startAppSession(data.access_token);
+      goToAppWithToken(data.access_token);
     } else {
       await apiPost("/auth/signup", { email, password });
       pendingEmail = email;
@@ -96,27 +90,23 @@ verifyForm.addEventListener("submit", async (e) => {
       email: pendingEmail,
       code: verifyCode.value.trim(),
     });
-    await startAppSession(data.access_token);
+    goToAppWithToken(data.access_token);
   } catch (err) {
     showError(verifyError, err.message);
   }
 });
 
-guestBtn.addEventListener("click", async () => {
-  try {
-    const res = await fetch(API_BASE + "/auth/guest", { method: "POST" });
-    const data = await res.json();
-    localStorage.removeItem("docquery_token"); // guests hold no token
-    localStorage.setItem("docquery_chat_session_id", data.chat_session_id);
-    window.location.href = "app.html";
-  } catch (err) {
-    showError(authError, "Couldn't start a guest session. Try again.");
-  }
+guestBtn.addEventListener("click", () => {
+  // No backend call here — no chat_session_id (and therefore no DB row)
+  // gets created until the guest actually uploads a document.
+  localStorage.removeItem("docquery_token");
+  localStorage.removeItem("docquery_chat_session_id");
+  localStorage.setItem("docquery_guest_mode", "true");
+  window.location.href = "app.html";
 });
 
-// --- Google Sign-In ---
 window.onload = () => {
-  if (!window.google) return; // script blocked/offline — Google button just won't render
+  if (!window.google) return;
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: handleGoogleCredential,
@@ -131,7 +121,7 @@ window.onload = () => {
 async function handleGoogleCredential(response) {
   try {
     const data = await apiPost("/auth/google", { id_token: response.credential });
-    await startAppSession(data.access_token);
+    goToAppWithToken(data.access_token);
   } catch (err) {
     showError(authError, err.message);
   }

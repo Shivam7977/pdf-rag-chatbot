@@ -8,70 +8,119 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body class="app-body">
 
-  <header class="site-header">
-    <div class="wrap header-inner">
-      <a href="index.html" class="logo">DocQuery</a>
-      <div class="app-header-right">
-        <span class="status-pill" id="account-pill"></span>
-        <button type="button" class="btn btn-ghost btn-sm" id="logout-btn">Log out</button>
+  <div class="app-layout">
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="logo">DocQuery</a>
+        <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse-btn" aria-label="Collapse sidebar">&laquo;</button>
+      </div>
+
+      <button type="button" class="sidebar-new-chat" id="new-chat-btn">+ New chat</button>
+
+      <ul class="sidebar-chat-list" id="sidebar-chat-list"></ul>
+
+      <div class="sidebar-user">
+        <button type="button" class="sidebar-user-btn" id="sidebar-user-btn">
+          <span class="sidebar-user-avatar" id="sidebar-user-avatar">?</span>
+          <span class="sidebar-user-name" id="sidebar-user-name">Guest</span>
+        </button>
+        <div class="sidebar-user-menu" id="sidebar-user-menu" hidden></div>
+      </div>
+    </aside>
+
+    <button type="button" class="sidebar-expand-btn" id="sidebar-expand-btn" hidden aria-label="Expand sidebar">&raquo;</button>
+
+    <div class="app-main">
+      <header class="app-topbar">
+        <span class="current-chat-title" id="current-chat-title">New chat</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="documents-toggle">Documents</button>
+        <div class="documents-panel" id="documents-panel" hidden>
+          <p class="documents-panel-title">Uploaded in this chat</p>
+          <ul class="documents-list" id="documents-list"></ul>
+        </div>
+      </header>
+
+      <main>
+        <section class="demo" id="demo" style="padding-top: var(--space-5);">
+          <div class="wrap">
+            <div class="demo-grid">
+
+              <div class="panel panel-topics">
+                <div class="panel-header">
+                  <span class="panel-eyebrow">Document</span>
+                  <h3>Upload a PDF</h3>
+                </div>
+
+                <div class="dropzone" id="dropzone">
+                  <input type="file" id="file-input" accept="application/pdf" hidden />
+                  <p class="dropzone-text" id="dropzone-text">Tap to choose a PDF, or drag one in</p>
+                  <p class="dropzone-file" id="dropzone-filename"></p>
+                </div>
+
+                <div class="upload-status" id="upload-status" hidden></div>
+              </div>
+
+              <div class="panel panel-chat">
+                <div class="panel-header">
+                  <span class="panel-eyebrow">Assistant</span>
+                  <h3>Ask a question</h3>
+                  <span class="status-pill" id="chat-status">Waiting for a document</span>
+                </div>
+
+                <div class="chat-log" id="chat-log">
+                  <div class="chat-empty" id="chat-empty">
+                    Upload a PDF above, then ask something like "What does this document conclude?"
+                  </div>
+                </div>
+
+                <form class="chat-input-row" id="chat-form">
+                  <input
+                    type="text"
+                    id="chat-input"
+                    class="chat-input"
+                    placeholder="Ask about your document…"
+                    autocomplete="off"
+                    disabled
+                  />
+                  <button type="submit" class="chat-send" id="chat-send" disabled aria-label="Send">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M2 10L17 2L11 17L8.5 11.5L2 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+  </div>
+
+  <div class="modal-overlay" id="delete-confirm-overlay" hidden>
+    <div class="modal">
+      <p class="modal-text">Delete this chat? Its messages and uploaded document(s) will be permanently removed. This can't be undone.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="delete-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="delete-confirm-btn">Delete</button>
       </div>
     </div>
-  </header>
+  </div>
 
-  <main>
-    <section class="demo" id="demo" style="padding-top: var(--space-6);">
-      <div class="wrap">
-        <div class="demo-grid">
-
-          <div class="panel panel-topics">
-            <div class="panel-header">
-              <span class="panel-eyebrow">Document</span>
-              <h3>Upload a PDF</h3>
-            </div>
-
-            <div class="dropzone" id="dropzone">
-              <input type="file" id="file-input" accept="application/pdf" hidden />
-              <p class="dropzone-text" id="dropzone-text">Tap to choose a PDF, or drag one in</p>
-              <p class="dropzone-file" id="dropzone-filename"></p>
-            </div>
-
-            <div class="upload-status" id="upload-status" hidden></div>
-          </div>
-
-          <div class="panel panel-chat">
-            <div class="panel-header">
-              <span class="panel-eyebrow">Assistant</span>
-              <h3>Ask a question</h3>
-              <span class="status-pill" id="chat-status">Waiting for a document</span>
-            </div>
-
-            <div class="chat-log" id="chat-log">
-              <div class="chat-empty" id="chat-empty">
-                Upload a PDF above, then ask something like "What does this document conclude?"
-              </div>
-            </div>
-
-            <form class="chat-input-row" id="chat-form">
-              <input
-                type="text"
-                id="chat-input"
-                class="chat-input"
-                placeholder="Ask about your document…"
-                autocomplete="off"
-                disabled
-              />
-              <button type="submit" class="chat-send" id="chat-send" disabled aria-label="Send">
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M2 10L17 2L11 17L8.5 11.5L2 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-              </button>
-            </form>
-          </div>
-
+  <div class="modal-overlay" id="preview-overlay" hidden>
+    <div class="modal modal-preview">
+      <div class="modal-preview-header">
+        <span class="modal-preview-filename" id="preview-filename"></span>
+        <div class="modal-preview-actions">
+          <a href="#" class="btn btn-ghost btn-sm" id="preview-download-btn" download>Download</a>
+          <button type="button" class="btn btn-ghost btn-sm" id="preview-close-btn">Close</button>
         </div>
       </div>
-    </section>
-  </main>
+      <iframe id="preview-iframe" class="preview-iframe"></iframe>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

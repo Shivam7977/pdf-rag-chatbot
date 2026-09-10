@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Text, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
@@ -36,6 +36,7 @@ class ChatSession(Base):
     user = relationship("User", back_populates="chat_sessions")
     messages = relationship("Message", back_populates="chat_session", cascade="all, delete-orphan")
     chunks = relationship("DocumentChunk", back_populates="chat_session", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="chat_session", cascade="all, delete-orphan")
 
 
 class Message(Base):
@@ -60,3 +61,17 @@ class DocumentChunk(Base):
     embedding = Column(Vector(EMBEDDING_DIM), nullable=False)
 
     chat_session = relationship("ChatSession", back_populates="chunks")
+
+
+class Document(Base):
+    """Stores the raw PDF bytes for preview/download — separate from
+    DocumentChunk, which only holds extracted text pieces for retrieval."""
+    __tablename__ = "documents"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chat_session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
+    filename = Column(String, nullable=False)
+    content_type = Column(String, default="application/pdf")
+    data = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    chat_session = relationship("ChatSession", back_populates="documents")
