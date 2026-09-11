@@ -1,12 +1,17 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.db import models
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/chats", tags=["chats"])
+
+
+class RenameChatRequest(BaseModel):
+    title: str
 
 
 def _check_ownership(session: models.ChatSession, user: models.User | None):
@@ -37,7 +42,15 @@ def list_chats(db: Session = Depends(get_db), user: models.User | None = Depends
         .order_by(models.ChatSession.last_active_at.desc())
         .all()
     )
-    return [{"id": str(s.id), "title": s.title, "last_active_at": s.last_active_at.isoformat()} for s in sessions]
+    return [
+        {
+            "id": str(s.id),
+            "title": s.title,
+            "created_at": s.created_at.isoformat() + "Z",
+            "last_active_at": s.last_active_at.isoformat() + "Z",
+        }
+        for s in sessions
+    ]
 
 
 @router.get("/{chat_session_id}")
@@ -63,6 +76,7 @@ def get_chat(chat_session_id: str, db: Session = Depends(get_db), user: models.U
     return {
         "id": str(session.id),
         "title": session.title,
+        "created_at": session.created_at.isoformat() + "Z",
         "has_documents": len(documents) > 0,
         "documents": documents,
         "messages": [
@@ -70,10 +84,25 @@ def get_chat(chat_session_id: str, db: Session = Depends(get_db), user: models.U
                 "role": m.role,
                 "content": m.content,
                 "sources": json.loads(m.sources_json) if m.sources_json else [],
+                "created_at": m.created_at.isoformat() + "Z",
             }
             for m in messages
         ],
     }
+
+
+@router.patch("/{chat_session_id}")
+def rename_chat(chat_session_id: str, payload: RenameChatRequest, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
+    session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
+    _check_ownership(session, user)
+
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title can't be empty.")
+
+    session.title = title[:100]
+    db.commit()
+    return {"title": session.title}
 
 
 @router.get("/{chat_session_id}/documents/{filename}")
@@ -97,6 +126,6 @@ def delete_chat(chat_session_id: str, db: Session = Depends(get_db), user: model
     session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
     _check_ownership(session, user)
 
-    db.delete(session)  # cascades to messages, document_chunks, and documents
+    db.delete(session)
     db.commit()
     return {"status": "deleted"}

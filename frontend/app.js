@@ -2,6 +2,7 @@ const API_BASE = "";
 let CHAT_SESSION_ID = localStorage.getItem("docquery_chat_session_id");
 const TOKEN = localStorage.getItem("docquery_token");
 const IS_GUEST_MODE = localStorage.getItem("docquery_guest_mode") === "true";
+let lastRenderedDateKey = null;
 
 if (!TOKEN && !IS_GUEST_MODE) {
   window.location.href = "login.html";
@@ -12,15 +13,18 @@ const CONFIG = {
   CHAT_ENDPOINT: "/chat",
 };
 
-const state = { documentReady: false };
+const state = { documentReady: false, lastQuestion: null };
 let chatBeingDeleted = null;
 let currentPreviewBlobUrl = null;
+let currentDocumentFilename = null; // for source-click-to-page
 
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
 const dropzoneText = document.getElementById("dropzone-text");
 const dropzoneFilename = document.getElementById("dropzone-filename");
 const uploadStatus = document.getElementById("upload-status");
+const uploadProgress = document.getElementById("upload-progress");
+const uploadProgressBar = document.getElementById("upload-progress-bar");
 
 const chatStatus = document.getElementById("chat-status");
 const chatLog = document.getElementById("chat-log");
@@ -55,14 +59,16 @@ const previewIframe = document.getElementById("preview-iframe");
 const previewDownloadBtn = document.getElementById("preview-download-btn");
 const previewCloseBtn = document.getElementById("preview-close-btn");
 
+const IS_MOBILE = () => window.innerWidth <= 768;
+
 function authHeaders(extra = {}) {
   return TOKEN ? { ...extra, Authorization: `Bearer ${TOKEN}` } : extra;
 }
 
 /* ============================================
-   DOCUMENT PREVIEW MODAL
+   DOCUMENT PREVIEW MODAL (with optional page jump)
    ============================================ */
-async function openDocumentPreview(filename) {
+async function openDocumentPreview(filename, page) {
   previewFilename.textContent = filename;
   previewIframe.src = "";
   previewOverlay.hidden = false;
@@ -78,7 +84,7 @@ async function openDocumentPreview(filename) {
     if (currentPreviewBlobUrl) URL.revokeObjectURL(currentPreviewBlobUrl);
     currentPreviewBlobUrl = URL.createObjectURL(blob);
 
-    previewIframe.src = currentPreviewBlobUrl;
+    previewIframe.src = currentPreviewBlobUrl + (page ? `#page=${page}` : "");
     previewDownloadBtn.href = currentPreviewBlobUrl;
     previewDownloadBtn.download = filename;
   } catch (err) {
@@ -98,20 +104,27 @@ function closePreview() {
 
 previewCloseBtn.addEventListener("click", closePreview);
 previewOverlay.addEventListener("click", (e) => {
-  if (e.target === previewOverlay) closePreview(); // click on the dark backdrop only
+  if (e.target === previewOverlay) closePreview();
 });
 
 /* ============================================
-   SIDEBAR COLLAPSE
+   SIDEBAR COLLAPSE / MOBILE AUTO-CLOSE
    ============================================ */
-sidebarCollapseBtn.addEventListener("click", () => {
+function collapseSidebar() {
   sidebar.classList.add("is-collapsed");
   sidebarExpandBtn.hidden = false;
-});
-sidebarExpandBtn.addEventListener("click", () => {
+}
+function expandSidebar() {
   sidebar.classList.remove("is-collapsed");
   sidebarExpandBtn.hidden = true;
-});
+}
+sidebarCollapseBtn.addEventListener("click", collapseSidebar);
+sidebarExpandBtn.addEventListener("click", expandSidebar);
+
+// On mobile, the sidebar starts open (so it's discoverable) but should
+// collapse itself as soon as the user picks or starts a chat, rather than
+// staying open and forcing a manual close.
+
 
 /* ============================================
    CLICK-OUTSIDE-TO-CLOSE
@@ -168,7 +181,7 @@ async function initUserArea() {
 }
 
 /* ============================================
-   SIDEBAR CHAT LIST
+   SIDEBAR CHAT LIST (with rename)
    ============================================ */
 async function loadChatList() {
   if (!TOKEN) {
@@ -189,21 +202,108 @@ async function loadChatList() {
     const titleSpan = document.createElement("span");
     titleSpan.className = "sidebar-chat-title";
     titleSpan.textContent = c.title || "New chat";
-    titleSpan.addEventListener("click", () => openChat(c.id));
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "sidebar-chat-delete";
-    deleteBtn.setAttribute("aria-label", "Delete chat");
-    deleteBtn.innerHTML = "&times;";
-    deleteBtn.addEventListener("click", (e) => {
+    // Distinguish single-click (open) from double-click (rename) with a
+    // short delay — otherwise the click's openChat() call reloads this
+    // whole list an instant after dblclick starts the rename input,
+    // wiping it out before you can type.
+    let clickTimer = null;
+    titleSpan.addEventListener("click", () => {
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => {
+        openChat(c.id);
+        if (IS_MOBILE()) collapseSidebar();
+      }, 220);
+    });
+    titleSpan.addEventListener("dblclick", (e) => {
       e.stopPropagation();
+      clearTimeout(clickTimer);
+      startRename(li, titleSpan, c.id, c.title);
+    });
+
+    const menuWrap = document.createElement("div");
+    menuWrap.className = "sidebar-chat-menu-wrap";
+
+    const menuBtn = document.createElement("button");
+    menuBtn.className = "sidebar-chat-menu-btn";
+    menuBtn.setAttribute("aria-label", "Chat options");
+    menuBtn.innerHTML = "&#8942;"; // vertical ellipsis
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      document.querySelectorAll(".sidebar-chat-menu.is-open").forEach((m) => {
+        if (m !== menu) m.classList.remove("is-open");
+      });
+      menu.classList.toggle("is-open");
+    });
+
+    const menu = document.createElement("div");
+    menu.className = "sidebar-chat-menu";
+    menu.innerHTML = `
+      <button type="button" class="sidebar-chat-menu-item" data-action="rename">Rename</button>
+      <button type="button" class="sidebar-chat-menu-item is-danger" data-action="delete">Delete</button>
+    `;
+    menu.querySelector('[data-action="rename"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.classList.remove("is-open");
+      startRename(li, titleSpan, c.id, c.title);
+    });
+    menu.querySelector('[data-action="delete"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.classList.remove("is-open");
       chatBeingDeleted = c.id;
       deleteOverlay.hidden = false;
     });
 
+    menuWrap.appendChild(menuBtn);
+    menuWrap.appendChild(menu);
+
     li.appendChild(titleSpan);
-    li.appendChild(deleteBtn);
+    li.appendChild(menuWrap);
     sidebarChatList.appendChild(li);
+  });
+}
+
+document.addEventListener("click", () => {
+  document.querySelectorAll(".sidebar-chat-menu.is-open").forEach((m) => m.classList.remove("is-open"));
+});
+
+function formatLocalTime(isoUtcString) {
+  const date = new Date(isoUtcString);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  return date.toLocaleDateString([], { month: "short", day: "numeric" }) +
+    ", " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function startRename(li, titleSpan, chatId, currentTitle) {
+  const input = document.createElement("input");
+  input.className = "sidebar-chat-rename-input";
+  input.value = currentTitle || "";
+  li.replaceChild(input, titleSpan);
+  input.focus();
+  input.select();
+
+  const commit = async () => {
+    const newTitle = input.value.trim();
+    if (newTitle && newTitle !== currentTitle) {
+      await fetch(API_BASE + `/chats/${chatId}`, {
+        method: "PATCH",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ title: newTitle }),
+      });
+      if (chatId === CHAT_SESSION_ID) currentChatTitle.textContent = newTitle;
+    }
+    loadChatList();
+  };
+
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur();
+    if (e.key === "Escape") { input.value = currentTitle; input.blur(); }
   });
 }
 
@@ -238,6 +338,7 @@ deleteConfirmBtn.addEventListener("click", async () => {
    INIT
    ============================================ */
 function init() {
+  if (IS_MOBILE()) collapseSidebar(); // sidebar starts closed on mobile
   resetChatUI();
   initUserArea();
   loadChatList();
@@ -264,15 +365,17 @@ async function openChat(chatId) {
   currentChatTitle.textContent = data.title || "New chat";
 
   if (data.has_documents) {
-    dropzoneText.textContent = "Tap to add another PDF to this chat";
+    dropzoneText.innerHTML = 'Tap to add another PDF<br><span class="dropzone-subtext">to this chat</span>';
     showUploadStatus("This chat already has document(s) — ask away, or add more.", false);
     enableChat();
   }
 
+  currentDocumentFilename = (data.documents && data.documents[0]) || null;
   renderDocumentsList(data.documents || []);
 
   data.messages.forEach((m) => {
-    const el = appendMessage(m.role === "user" ? "user" : "assistant", m.content);
+    const el = appendMessage(m.role === "user" ? "user" : "assistant", m.content, { createdAt: m.created_at });
+    if (m.role === "user") state.lastQuestion = m.content;
     if (m.sources && m.sources.length) renderSourceChips(el, m.sources);
   });
 
@@ -284,25 +387,30 @@ function resetChatUI(clearSessionId = true) {
     CHAT_SESSION_ID = null;
     localStorage.removeItem("docquery_chat_session_id");
   }
+  lastRenderedDateKey = null;
   chatLog.innerHTML = "";
   chatEmpty.hidden = false;
   chatLog.appendChild(chatEmpty);
   state.documentReady = false;
+  state.lastQuestion = null;
+  currentDocumentFilename = null;
   chatInput.disabled = true;
   chatSend.disabled = true;
   chatStatus.textContent = "Waiting for a document";
-  chatStatus.classList.remove("is-ready");
-  dropzoneText.textContent = "Tap to choose a PDF, or drag one in";
+  chatStatus.className = "status-pill";
+  dropzoneText.innerHTML = 'Drop your PDF here<br><span class="dropzone-subtext">or click to browse</span>';
   dropzoneFilename.textContent = "";
   showUploadStatus("", false);
   renderDocumentsList([]);
   currentChatTitle.textContent = "New chat";
+  uploadProgress.hidden = true;
 }
 
 newChatBtn.addEventListener("click", () => {
   documentsPanel.hidden = true;
   resetChatUI();
   loadChatList();
+  if (IS_MOBILE()) collapseSidebar();
 });
 
 function renderDocumentsList(filenames) {
@@ -333,6 +441,9 @@ async function ensureChatSession() {
   return CHAT_SESSION_ID;
 }
 
+/* ============================================
+   UPLOAD — with real progress (XHR) + pseudo processing steps
+   ============================================ */
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("is-dragover"); });
 dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragover"));
@@ -347,15 +458,22 @@ fileInput.addEventListener("change", () => {
   if (file) handleFile(file);
 });
 
+const MAX_UPLOAD_MB = 20;
+
 async function handleFile(file) {
   if (file.type !== "application/pdf") {
     showUploadStatus("Please choose a PDF file.", true);
     return;
   }
+  if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+    showUploadStatus(`This file is over the ${MAX_UPLOAD_MB} MB limit.`, true);
+    return;
+  }
 
   dropzoneFilename.textContent = file.name;
-  dropzoneText.textContent = "Uploading…";
   showUploadStatus("", false);
+  uploadProgress.hidden = false;
+  uploadProgressBar.style.width = "0%";
 
   try {
     const chatSessionId = await ensureChatSession();
@@ -364,35 +482,65 @@ async function handleFile(file) {
     formData.append("file", file);
     formData.append("chat_session_id", chatSessionId);
 
-    const res = await fetch(CONFIG.UPLOAD_ENDPOINT, {
-      method: "POST",
-      headers: authHeaders(),
-      body: formData,
-    });
+    const data = await uploadWithProgress(formData);
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `Upload failed (${res.status})`);
-
+    uploadProgress.hidden = true;
     state.documentReady = true;
-    dropzoneText.textContent = "Tap to add another PDF to this chat";
+    dropzoneText.innerHTML = 'Tap to add another PDF<br><span class="dropzone-subtext">to this chat</span>';
     showUploadStatus(`"${file.name}" is indexed and ready.`, false);
     enableChat();
 
+    currentDocumentFilename = file.name;
     const currentDocs = Array.from(documentsList.children)
       .filter((li) => !li.classList.contains("documents-empty"))
       .map((li) => li.textContent);
     renderDocumentsList([...currentDocs, file.name]);
 
-    if (currentChatTitle.textContent === "New chat") {
-      currentChatTitle.textContent = file.name;
-    }
-
-    await loadChatList();
+    await loadChatList(); // picks up the just-created "New chat" entry
   } catch (err) {
     console.error(err);
-    dropzoneText.textContent = "Tap to choose a PDF, or drag one in";
-    showUploadStatus(err.message || "Couldn't upload that file.", true);
+    uploadProgress.hidden = true;
+    dropzoneText.innerHTML = 'Drop your PDF here<br><span class="dropzone-subtext">or click to browse</span>';
+    showUploadStatus(err.message || "Couldn't process document. Try uploading again.", true);
   }
+}
+
+function uploadWithProgress(formData) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", API_BASE + CONFIG.UPLOAD_ENDPOINT);
+    if (TOKEN) xhr.setRequestHeader("Authorization", `Bearer ${TOKEN}`);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        uploadProgressBar.style.width = pct + "%";
+        dropzoneText.textContent = `Uploading… ${pct}%`;
+      }
+    });
+
+    xhr.upload.addEventListener("load", () => {
+      // Upload finished, server is now parsing/embedding — we don't get
+      // real progress for this part (it's one request-response), so show
+      // an indicative "processing" state instead of a stalled progress bar.
+      dropzoneText.textContent = "Processing document…";
+      uploadProgressBar.classList.add("is-indeterminate");
+    });
+
+    xhr.onload = () => {
+      let data;
+      try { data = JSON.parse(xhr.responseText); } catch { data = {}; }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(data.detail || `Upload failed (${xhr.status})`));
+      }
+      uploadProgressBar.classList.remove("is-indeterminate");
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload."));
+
+    xhr.send(formData);
+  });
 }
 
 function showUploadStatus(message, isError) {
@@ -402,20 +550,27 @@ function showUploadStatus(message, isError) {
 }
 
 function enableChat() {
-  chatStatus.textContent = "Ready";
-  chatStatus.classList.add("is-ready");
+  chatStatus.textContent = "✓ Ready";
+  chatStatus.className = "status-pill is-ready";
   chatInput.disabled = false;
   chatSend.disabled = false;
 }
 
+/* ============================================
+   CHAT
+   ============================================ */
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const message = chatInput.value.trim();
   if (!message || !state.documentReady) return;
-
   chatInput.value = "";
+  await askQuestion(message);
+});
+
+async function askQuestion(message) {
+  state.lastQuestion = message;
   appendMessage("user", message);
-  const assistantEl = appendMessage("assistant", "", { streaming: true });
+  const assistantEl = appendMessage("assistant", "", { streaming: true, statusText: "Searching your document…" });
 
   chatInput.disabled = true;
   chatSend.disabled = true;
@@ -431,7 +586,7 @@ chatForm.addEventListener("submit", async (e) => {
     chatSend.disabled = false;
     chatInput.focus();
   }
-});
+}
 
 async function streamAnswer(message, assistantEl) {
   const res = await fetch(CONFIG.CHAT_ENDPOINT, {
@@ -449,6 +604,7 @@ async function streamAnswer(message, assistantEl) {
   const decoder = new TextDecoder();
   let buffer = "";
   let answerText = "";
+  let firstTokenReceived = false;
 
   while (true) {
     const { value, done } = await reader.read();
@@ -465,13 +621,28 @@ async function streamAnswer(message, assistantEl) {
       try { payload = JSON.parse(data); } catch { continue; }
 
       if (event === "token") {
+        if (!firstTokenReceived) {
+          firstTokenReceived = true;
+          clearMessageStatus(assistantEl);
+        }
         answerText += payload.content ?? "";
         setMessageText(assistantEl, answerText, { streaming: true });
       } else if (event === "sources") {
-        renderSourceChips(assistantEl, payload.sources ?? []);
+        finalizeAssistantMessage(assistantEl, payload.sources ?? []);
       } else if (event === "error") {
+        clearMessageStatus(assistantEl);
         setMessageText(assistantEl, payload.message || "The assistant couldn't answer that.");
       }
+    }
+  }
+
+  await loadChatList(); // title may have just been auto-set from this question
+  if (currentChatTitle.textContent === "New chat") {
+    // Refresh the topbar title too, once the backend has renamed it.
+    const res2 = await fetch(API_BASE + `/chats/${CHAT_SESSION_ID}`, { headers: authHeaders() });
+    if (res2.ok) {
+      const data2 = await res2.json();
+      currentChatTitle.textContent = data2.title || "New chat";
     }
   }
 }
@@ -486,18 +657,64 @@ function parseSSEEvent(rawBlock) {
   return { event, data };
 }
 
+/* ============================================
+   MESSAGE RENDERING + CONTROLS
+   ============================================ */
 function appendMessage(role, text, opts = {}) {
   chatEmpty.hidden = true;
+
+  const createdAt = opts.createdAt || new Date().toISOString();
+  const dateKey = new Date(createdAt).toDateString();
+
+  if (dateKey !== lastRenderedDateKey) {
+    const sep = document.createElement("div");
+    sep.className = "date-separator";
+    sep.textContent = formatDateSeparator(createdAt);
+    chatLog.appendChild(sep);
+    lastRenderedDateKey = dateKey;
+  }
+
   const el = document.createElement("div");
   el.className = `chat-message ${role}`;
-  el.innerHTML = escapeHtml(text) + (opts.streaming ? '<span class="cursor"></span>' : "");
+
+  const textEl = document.createElement("div");
+  textEl.className = "msg-text";
+  if (opts.statusText) {
+    textEl.innerHTML = `<span class="msg-status">${escapeHtml(opts.statusText)}</span>`;
+  } else {
+    textEl.innerHTML = escapeHtml(text) + (opts.streaming ? '<span class="cursor"></span>' : "");
+  }
+  el.appendChild(textEl);
+
+  const timeEl = document.createElement("div");
+  timeEl.className = "msg-time";
+  timeEl.textContent = formatLocalTime(createdAt);
+  el.appendChild(timeEl);
+
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
   return el;
 }
 
+function formatDateSeparator(isoUtcString) {
+  const date = new Date(isoUtcString);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (date.toDateString() === now.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+}
+
+function clearMessageStatus(el) {
+  const textEl = el.querySelector(".msg-text");
+  textEl.innerHTML = '<span class="cursor"></span>';
+}
+
 function setMessageText(el, text, opts = {}) {
-  el.innerHTML = escapeHtml(text) + (opts.streaming ? '<span class="cursor"></span>' : "");
+  const textEl = el.querySelector(".msg-text");
+  textEl.innerHTML = escapeHtml(text) + (opts.streaming ? '<span class="cursor"></span>' : "");
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
@@ -506,17 +723,57 @@ function stopStreamingCursor(el) {
   if (cursor) cursor.remove();
 }
 
+function finalizeAssistantMessage(el, sources) {
+  if (sources.length > 0) {
+    const note = document.createElement("div");
+    note.className = "retrieved-note";
+    note.textContent = `Retrieved ${sources.length} relevant section${sources.length > 1 ? "s" : ""}`;
+    el.appendChild(note);
+    renderSourceChips(el, sources);
+  }
+  addAnswerControls(el);
+}
+
 function renderSourceChips(el, sources) {
   const wrap = document.createElement("div");
   wrap.className = "source-chips";
   sources.forEach((s) => {
-    const chip = document.createElement("span");
+    const chip = document.createElement("button");
+    chip.type = "button";
     chip.className = "source-chip";
-    chip.textContent = s.page ? `${s.source} · p.${s.page}` : s.source;
+    chip.textContent = s.page ? `📄 ${s.source} · p.${s.page} → View` : s.source;
+    chip.addEventListener("click", () => openDocumentPreview(s.source, s.page));
     wrap.appendChild(chip);
   });
   el.appendChild(wrap);
   chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function addAnswerControls(el) {
+  const answerText = el.querySelector(".msg-text").textContent;
+  const bar = document.createElement("div");
+  bar.className = "answer-controls";
+  bar.innerHTML = `
+    <button type="button" class="answer-control-btn" data-action="copy">⧉ Copy</button>
+    <button type="button" class="answer-control-btn" data-action="regenerate">↻ Regenerate</button>
+    <button type="button" class="answer-control-btn" data-action="simplify">Simplify</button>
+    <button type="button" class="answer-control-btn" data-action="summarize">Summarize</button>
+  `;
+
+  bar.querySelector('[data-action="copy"]').addEventListener("click", () => {
+    navigator.clipboard.writeText(answerText);
+  });
+  bar.querySelector('[data-action="regenerate"]').addEventListener("click", () => {
+    if (state.lastQuestion) askQuestion(state.lastQuestion);
+  });
+  bar.querySelector('[data-action="simplify"]').addEventListener("click", () => {
+    if (state.lastQuestion) askQuestion(`${state.lastQuestion} — explain it in simpler terms`);
+  });
+  bar.querySelector('[data-action="summarize"]').addEventListener("click", () => {
+    if (state.lastQuestion) askQuestion(`Summarize the answer to: ${state.lastQuestion}`);
+  });
+
+  el.appendChild(bar);
 }
 
 function escapeHtml(str) {

@@ -21,10 +21,12 @@ def sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
+def _make_title_from_question(question: str) -> str:
+    q = question.strip()
+    return (q[:47] + "...") if len(q) > 50 else q
+
+
 def stream_chat_response(question: str, chat_session_id: str):
-    # Own DB session — the one injected into the route function closes as
-    # soon as the route returns the StreamingResponse object, before this
-    # generator has actually finished streaming.
     db = SessionLocal()
     try:
         chunks = retrieve_chunks(question, chat_session_id, db, top_k=5)
@@ -34,6 +36,11 @@ def stream_chat_response(question: str, chat_session_id: str):
             session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
             if session:
                 session.last_active_at = datetime.utcnow()
+                # First real exchange in this chat renames it from the
+                # uploaded filename to something about what was asked —
+                # matches how ChatGPT/Claude name chats.
+                if role == "user" and session.title in (None, "New chat"):
+                    session.title = _make_title_from_question(content)
             db.commit()
 
         save_message("user", question, "[]")
@@ -83,9 +90,6 @@ def chat(
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found. Start one via /auth/guest or /chats.")
 
-    # A chat owned by a registered user can only be used by that same user.
-    # A guest chat (user_id is None) has no owner to check against — the
-    # unguessable chat_session_id itself is what scopes access to it.
     if session.user_id is not None and (not user or session.user_id != user.id):
         raise HTTPException(status_code=403, detail="This chat belongs to another account.")
 

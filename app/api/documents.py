@@ -63,7 +63,6 @@ def upload_document(
         chunk_count = add_chunks(chunks, chat_session_id=chat_session_id, db=db)
         invalidate_bm25_index(chat_session_id)
 
-        # Store the raw PDF for later preview/download.
         db.add(models.Document(
             chat_session_id=chat_session_id,
             filename=file.filename,
@@ -73,8 +72,9 @@ def upload_document(
 
         session.total_upload_bytes += file_size
         session.last_active_at = datetime.utcnow()
-        if not session.title or session.title == "New chat":
-            session.title = file.filename
+        # Title is NOT set from the filename anymore — it stays "New chat"
+        # until the user's first question renames it (see chat.py), since
+        # what they ask about is more meaningful than the raw filename.
         db.commit()
     finally:
         save_path.unlink(missing_ok=True)

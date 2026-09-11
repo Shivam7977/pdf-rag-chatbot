@@ -20,6 +20,7 @@
 
       <button type="button" class="sidebar-new-chat" id="new-chat-btn">+ New chat</button>
 
+      <p class="sidebar-section-label">Recent</p>
       <ul class="sidebar-chat-list" id="sidebar-chat-list"></ul>
 
       <div class="sidebar-user">
@@ -56,8 +57,16 @@
 
                 <div class="dropzone" id="dropzone">
                   <input type="file" id="file-input" accept="application/pdf" hidden />
-                  <p class="dropzone-text" id="dropzone-text">Tap to choose a PDF, or drag one in</p>
+                  <svg class="dropzone-icon" width="36" height="36" viewBox="0 0 24 24" fill="none">
+                    <path d="M6 2h9l5 5v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                    <path d="M14 2v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                  </svg>
+                  <p class="dropzone-text" id="dropzone-text">Drop your PDF here<br><span class="dropzone-subtext">or click to browse</span></p>
+                  <p class="dropzone-meta">PDF · Max 20 MB · Your documents stay private</p>
                   <p class="dropzone-file" id="dropzone-filename"></p>
+                  <div class="upload-progress" id="upload-progress" hidden>
+                    <div class="upload-progress-bar" id="upload-progress-bar"></div>
+                  </div>
                 </div>
 
                 <div class="upload-status" id="upload-status" hidden></div>

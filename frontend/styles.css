@@ -1095,3 +1095,201 @@ section {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
+
+/* ============================================
+   DROPZONE v2
+   ============================================ */
+.dropzone-icon {
+  color: var(--color-ink-muted);
+  margin-bottom: var(--space-2);
+}
+.dropzone-subtext {
+  color: var(--color-ink-muted);
+  font-weight: 400;
+}
+.dropzone-meta {
+  font-size: 0.78rem;
+  color: var(--color-ink-muted);
+  margin-top: var(--space-2);
+}
+.upload-progress {
+  margin-top: var(--space-3);
+  height: 4px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.upload-progress-bar {
+  height: 100%;
+  background: var(--color-accent);
+  width: 0%;
+  transition: width 0.2s ease;
+}
+.upload-progress-bar.is-indeterminate {
+  width: 100% !important;
+  animation: indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes indeterminate {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ============================================
+   CHAT TITLE FIX (topbar no longer hides behind expand arrow)
+   ============================================ */
+.app-topbar {
+  padding-left: 56px;
+}
+.sidebar-expand-btn {
+  top: 14px;
+}
+
+/* ============================================
+   SIDEBAR CHAT ITEM — time + delete grouped
+   ============================================ */
+.sidebar-chat-item {
+  align-items: center;
+}
+.sidebar-chat-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.sidebar-chat-time {
+  font-size: 0.72rem;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
+/* ============================================
+   MESSAGE STATUS / RETRIEVED NOTE
+   ============================================ */
+.msg-status {
+  color: var(--color-ink-muted);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+.retrieved-note {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+  margin-top: var(--space-2);
+}
+
+/* ============================================
+   ANSWER CONTROLS
+   ============================================ */
+.answer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.answer-control-btn {
+  font-size: 0.78rem;
+  padding: 3px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+.answer-control-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: 240px;
+  }
+  /* Same clearance as desktop — the expand button is fixed-position and
+     needs this much space regardless of screen size. */
+  .app-topbar {
+    padding-left: 56px;
+  }
+  .sidebar-expand-btn {
+    left: var(--space-3);
+    top: 14px;
+  }
+  .current-chat-title {
+    max-width: 45%;
+  }
+}
+
+/* ============================================
+   MESSAGE TIMESTAMP
+   ============================================ */
+.msg-time {
+  font-size: 0.72rem;
+  color: var(--color-ink-muted);
+  margin-top: 4px;
+}
+.chat-message.user .msg-time {
+  text-align: right;
+  color: rgba(255,255,255,0.6);
+}
+
+/* ============================================
+   SIDEBAR CHAT — three-dot menu
+   ============================================ */
+.sidebar-chat-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.sidebar-chat-menu-btn {
+  background: none;
+  border: none;
+  color: var(--color-ink-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  visibility: hidden;
+  border-radius: 4px;
+}
+.sidebar-chat-item:hover .sidebar-chat-menu-btn { visibility: visible; }
+.sidebar-chat-menu-btn:hover { background: var(--color-border); }
+
+.sidebar-chat-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 25;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 110px;
+  overflow: hidden;
+}
+.sidebar-chat-menu.is-open { display: block; }
+
+.sidebar-chat-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--color-ink);
+}
+.sidebar-chat-menu-item:hover { background: var(--color-surface); }
+.sidebar-chat-menu-item.is-danger { color: var(--color-error); }
+
+/* ============================================
+   DATE SEPARATOR
+   ============================================ */
+.date-separator {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-ink-muted);
+  margin: var(--space-4) 0;
+  position: relative;
+}
