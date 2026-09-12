@@ -56,8 +56,6 @@ def get_document_filenames(chat_session_id: str, db: Session) -> list[str]:
 
 
 def get_documents_metadata(chat_session_id: str, db: Session) -> list[dict]:
-    """Filename + display_title for every document uploaded in this chat —
-    used for natural-language document matching in comparison questions."""
     rows = (
         db.query(models.Document)
         .filter(models.Document.chat_session_id == chat_session_id)
@@ -71,6 +69,14 @@ def count_documents(chat_session_id: str, db: Session) -> int:
 
 
 def get_spread_chunks(chat_session_id: str, db: Session, chunks_per_document: int = 8):
+    """
+    Returns chunks evenly spread across pages, GROUPED per document (not
+    flattened) — so a multi-document "summarize these" question can be
+    answered per-document instead of blending every document's content
+    into one confusing combined summary.
+
+    Returns: [{"filename": ..., "chunks": [{"text","page","source"}, ...]}, ...]
+    """
     rows = (
         db.query(models.DocumentChunk)
         .filter(models.DocumentChunk.chat_session_id == chat_session_id)
@@ -84,19 +90,31 @@ def get_spread_chunks(chat_session_id: str, db: Session, chunks_per_document: in
     for r in rows:
         by_file[r.filename].append(r)
 
-    sampled = []
-    for file_rows in by_file.values():
+    grouped = []
+    for filename, file_rows in by_file.items():
         n = len(file_rows)
         take = min(chunks_per_document, n)
         step = max(1, n // take)
-        for i in range(0, n, step):
-            if len(sampled) < chunks_per_document * len(by_file):
-                sampled.append(file_rows[i])
+        sampled = [file_rows[i] for i in range(0, n, step)][:chunks_per_document]
+        grouped.append({
+            "filename": filename,
+            "chunks": [{"text": r.text, "page": r.page, "source": r.filename} for r in sampled],
+        })
 
-    return [{"text": r.text, "page": r.page, "source": r.filename} for r in sampled]
+    return grouped
 
 
 def query_chunks_per_document(query_text: str, chat_session_id: str, db: Session, top_k_per_doc: int = 5, filenames: list[str] | None = None):
+    """
+    For "comparison" questions across multiple uploaded PDFs: runs dense
+    retrieval SEPARATELY per filename, so every document contributes its
+    own top matches — otherwise a single shared top-k could end up entirely
+    dominated by whichever document happens to score highest overall.
+
+    filenames: restrict to these specific documents only (used when the
+    question explicitly names them). Pass None to include every document
+    uploaded in this chat.
+    """
     target_filenames = filenames if filenames else get_document_filenames(chat_session_id, db)
 
     query_embedding = embed_texts([query_text])[0]

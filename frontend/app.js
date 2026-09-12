@@ -157,16 +157,39 @@ async function initUserArea() {
       sidebarUserName.textContent = "Account";
       sidebarUserAvatar.textContent = "?";
     }
-    sidebarUserMenu.innerHTML = `<button type="button" class="sidebar-user-menu-item" id="logout-btn">Log out</button>`;
+    sidebarUserMenu.innerHTML = `
+      <button type="button" class="sidebar-user-menu-item" id="settings-btn">Settings</button>
+      <button type="button" class="sidebar-user-menu-item" id="learn-more-btn">Learn more</button>
+      <button type="button" class="sidebar-user-menu-item" id="quick-question-btn">Quick question</button>
+      <div class="sidebar-user-menu-divider"></div>
+      <button type="button" class="sidebar-user-menu-item" id="logout-btn">Log out</button>
+    `;
   } else {
     sidebarUserName.textContent = "Guest";
     sidebarUserAvatar.textContent = "G";
-    sidebarUserMenu.innerHTML = `<a href="login.html" class="sidebar-user-menu-item">Log in</a>`;
+    sidebarUserMenu.innerHTML = `
+      <button type="button" class="sidebar-user-menu-item" id="settings-btn">Settings</button>
+      <button type="button" class="sidebar-user-menu-item" id="learn-more-btn">Learn more</button>
+      <button type="button" class="sidebar-user-menu-item" id="quick-question-btn">Quick question</button>
+      <div class="sidebar-user-menu-divider"></div>
+      <a href="login.html" class="sidebar-user-menu-item">Log in</a>
+    `;
   }
 
   sidebarUserBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     sidebarUserMenu.hidden = !sidebarUserMenu.hidden;
+  });
+
+  // Placeholders — wire these up once you've decided what each should do.
+  document.getElementById("settings-btn")?.addEventListener("click", () => {
+    console.log("Settings clicked — not implemented yet");
+  });
+  document.getElementById("learn-more-btn")?.addEventListener("click", () => {
+    window.location.href = "index.html#how-it-works";
+  });
+  document.getElementById("quick-question-btn")?.addEventListener("click", () => {
+    console.log("Quick question clicked — not implemented yet");
   });
 
   const logoutBtn = document.getElementById("logout-btn");
@@ -179,7 +202,6 @@ async function initUserArea() {
     });
   }
 }
-
 /* ============================================
    SIDEBAR CHAT LIST (with rename)
    ============================================ */

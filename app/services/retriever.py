@@ -5,6 +5,12 @@ from app.services.query_classifier import classify_question, extract_mentioned_d
 
 
 def retrieve_chunks(question: str, chat_session_id: str, db, top_k: int = 5, initial_k: int = 20):
+    """
+    Returns (chunks, mode).
+    - "specific": flat list of chunks with rerank_score.
+    - "broad": list of {"filename", "chunks"} GROUPED per document.
+    - "comparison": flat list of chunks (each carries its own "source").
+    """
     document_count = count_documents(chat_session_id, db)
     mode = classify_question(question, document_count)
 

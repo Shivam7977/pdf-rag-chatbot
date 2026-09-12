@@ -27,6 +27,18 @@ def _make_title_from_question(question: str) -> str:
     return (q[:47] + "...") if len(q) > 50 else q
 
 
+def _flatten_for_sources(chunks) -> list:
+    """chunks can be a flat list (specific/comparison modes) or a grouped
+    list of {"filename","chunks"} (broad mode) — normalize to flat for
+    building the source-chips list either way."""
+    if chunks and isinstance(chunks[0], dict) and "chunks" in chunks[0]:
+        flat = []
+        for group in chunks:
+            flat.extend(group["chunks"])
+        return flat
+    return chunks
+
+
 def stream_chat_response(question: str, chat_session_id: str):
     db = SessionLocal()
     try:
@@ -56,10 +68,6 @@ def stream_chat_response(question: str, chat_session_id: str):
 
         save_message("user", question, "[]")
 
-        # The guardrail's rerank_score check only applies to "specific"
-        # mode — "broad"/"comparison" chunks don't carry a rerank_score
-        # (see retriever.py), and always have SOME document content to
-        # work with as long as chunks isn't empty.
         no_content = not chunks or (mode == "specific" and chunks[0]["rerank_score"] < RERANK_CONFIDENCE_THRESHOLD)
 
         if no_content:
@@ -80,9 +88,10 @@ def stream_chat_response(question: str, chat_session_id: str):
 
             yield sse_event("done", {})
 
+            flat_chunks = _flatten_for_sources(chunks)
             seen = set()
             sources_out = []
-            for c in chunks:
+            for c in flat_chunks:
                 key = (c["source"], c["page"])
                 if key in seen:
                     continue
