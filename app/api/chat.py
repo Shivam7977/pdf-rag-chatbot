@@ -8,13 +8,14 @@ from app.db.database import get_db, SessionLocal
 from app.db import models
 from app.schemas.chat import ChatRequest
 from app.services.retriever import retrieve_chunks
-from app.services.llm import generate_answer
+from app.services.llm import generate_answer, rewrite_query, get_confidence_level
 from app.api.deps import get_current_user
 
 router = APIRouter()
 
 RERANK_CONFIDENCE_THRESHOLD = -3.0
 NO_ANSWER_MESSAGE = "I couldn't find this in the uploaded documents."
+HISTORY_LOOKBACK = 4
 
 
 def sse_event(event: str, data: dict) -> str:
@@ -29,23 +30,39 @@ def _make_title_from_question(question: str) -> str:
 def stream_chat_response(question: str, chat_session_id: str):
     db = SessionLocal()
     try:
-        chunks = retrieve_chunks(question, chat_session_id, db, top_k=5)
+        recent_messages = (
+            db.query(models.Message)
+            .filter(models.Message.chat_session_id == chat_session_id)
+            .order_by(models.Message.created_at.desc())
+            .limit(HISTORY_LOOKBACK)
+            .all()
+        )
+        recent_history = [
+            {"role": m.role, "content": m.content}
+            for m in reversed(recent_messages)
+        ]
+
+        search_query = rewrite_query(question, recent_history)
+        chunks, mode = retrieve_chunks(search_query, chat_session_id, db, top_k=5)
 
         def save_message(role: str, content: str, sources_json: str):
             db.add(models.Message(chat_session_id=chat_session_id, role=role, content=content, sources_json=sources_json))
             session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
             if session:
                 session.last_active_at = datetime.utcnow()
-                # First real exchange in this chat renames it from the
-                # uploaded filename to something about what was asked —
-                # matches how ChatGPT/Claude name chats.
                 if role == "user" and session.title in (None, "New chat"):
                     session.title = _make_title_from_question(content)
             db.commit()
 
         save_message("user", question, "[]")
 
-        if not chunks or chunks[0]["rerank_score"] < RERANK_CONFIDENCE_THRESHOLD:
+        # The guardrail's rerank_score check only applies to "specific"
+        # mode — "broad"/"comparison" chunks don't carry a rerank_score
+        # (see retriever.py), and always have SOME document content to
+        # work with as long as chunks isn't empty.
+        no_content = not chunks or (mode == "specific" and chunks[0]["rerank_score"] < RERANK_CONFIDENCE_THRESHOLD)
+
+        if no_content:
             for word in NO_ANSWER_MESSAGE.split(" "):
                 yield sse_event("token", {"content": word + " "})
             yield sse_event("done", {})
@@ -53,9 +70,11 @@ def stream_chat_response(question: str, chat_session_id: str):
             save_message("assistant", NO_ANSWER_MESSAGE, "[]")
             return
 
+        confidence = get_confidence_level(chunks[0]["rerank_score"]) if mode == "specific" else None
+
         answer_text = ""
         try:
-            for token in generate_answer(question, chunks):
+            for token in generate_answer(question, chunks, mode=mode):
                 answer_text += token
                 yield sse_event("token", {"content": token})
 
@@ -70,7 +89,10 @@ def stream_chat_response(question: str, chat_session_id: str):
                 seen.add(key)
                 sources_out.append({"page": c["page"], "source": c["source"], "text": c["text"][:200]})
 
-            yield sse_event("sources", {"sources": sources_out})
+            sources_payload = {"sources": sources_out}
+            if confidence:
+                sources_payload["confidence"] = confidence
+            yield sse_event("sources", sources_payload)
             save_message("assistant", answer_text, json.dumps(sources_out))
 
         except Exception as e:

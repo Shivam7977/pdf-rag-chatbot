@@ -628,7 +628,7 @@ async function streamAnswer(message, assistantEl) {
         answerText += payload.content ?? "";
         setMessageText(assistantEl, answerText, { streaming: true });
       } else if (event === "sources") {
-        finalizeAssistantMessage(assistantEl, payload.sources ?? []);
+        finalizeAssistantMessage(assistantEl, payload.sources ?? [], payload.confidence);
       } else if (event === "error") {
         clearMessageStatus(assistantEl);
         setMessageText(assistantEl, payload.message || "The assistant couldn't answer that.");
@@ -723,7 +723,13 @@ function stopStreamingCursor(el) {
   if (cursor) cursor.remove();
 }
 
-function finalizeAssistantMessage(el, sources) {
+function finalizeAssistantMessage(el, sources, confidence) {
+  if (confidence) {
+    const badge = document.createElement("span");
+    badge.className = `confidence-badge is-${confidence}`;
+    badge.textContent = confidence === "high" ? "High confidence" : "Low confidence — verify from source";
+    el.querySelector(".msg-text").after(badge);
+  }
   if (sources.length > 0) {
     const note = document.createElement("div");
     note.className = "retrieved-note";

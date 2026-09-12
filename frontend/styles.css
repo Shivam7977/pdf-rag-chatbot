@@ -1293,3 +1293,23 @@ section {
   margin: var(--space-4) 0;
   position: relative;
 }
+
+/* ============================================
+   CONFIDENCE BADGE
+   ============================================ */
+.confidence-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  margin-top: var(--space-2);
+  font-weight: 500;
+}
+.confidence-badge.is-high {
+  background: var(--color-trust-tint);
+  color: var(--color-trust);
+}
+.confidence-badge.is-low {
+  background: #FCE9DE;
+  color: var(--color-error);
+}

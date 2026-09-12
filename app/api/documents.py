@@ -12,6 +12,7 @@ from app.services.chunker import chunk_pages
 from app.services.vector_store import add_chunks
 from app.services.bm25_retriever import invalidate_bm25_index
 from app.services.cleanup import cleanup_stale_guests
+from app.services.title_extractor import extract_display_title
 from app.config import MAX_UPLOAD_BYTES_PER_SESSION
 from app.api.deps import get_current_user
 
@@ -63,20 +64,23 @@ def upload_document(
         chunk_count = add_chunks(chunks, chat_session_id=chat_session_id, db=db)
         invalidate_bm25_index(chat_session_id)
 
+        # Best-effort natural-language title, so the document can be
+        # referred to by topic ("the funding report") and not just by its
+        # (possibly meaningless) filename. Never blocks upload on failure.
+        display_title = extract_display_title(pages[0]["text"], fallback_filename=file.filename)
+
         db.add(models.Document(
             chat_session_id=chat_session_id,
             filename=file.filename,
+            display_title=display_title,
             content_type=file.content_type,
             data=file_bytes,
         ))
 
         session.total_upload_bytes += file_size
         session.last_active_at = datetime.utcnow()
-        # Title is NOT set from the filename anymore — it stays "New chat"
-        # until the user's first question renames it (see chat.py), since
-        # what they ask about is more meaningful than the raw filename.
         db.commit()
     finally:
         save_path.unlink(missing_ok=True)
 
-    return {"filename": file.filename, "chunks_indexed": chunk_count}
+    return {"filename": file.filename, "display_title": display_title, "chunks_indexed": chunk_count}

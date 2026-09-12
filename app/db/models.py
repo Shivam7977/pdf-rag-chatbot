@@ -64,12 +64,11 @@ class DocumentChunk(Base):
 
 
 class Document(Base):
-    """Stores the raw PDF bytes for preview/download — separate from
-    DocumentChunk, which only holds extracted text pieces for retrieval."""
     __tablename__ = "documents"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     chat_session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
     filename = Column(String, nullable=False)
+    display_title = Column(String, nullable=True)  # LLM-extracted topic/title, for natural-language matching
     content_type = Column(String, default="application/pdf")
     data = Column(LargeBinary, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
