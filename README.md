@@ -617,3 +617,12 @@ The final retrieval pipeline achieved:
 96.7% strict Recall@10
 
 on the current 30-question evaluation set.
+
+flagships
+
+1. Conversational follow-up questions (mera top recommendation)
+2. Answer confidence score dikhana
+3. Auto-generated document summary on upload
+4. Multi-document comparison mode
+
+per pdf limit 20 mb and complete chat limit  50 mb.
