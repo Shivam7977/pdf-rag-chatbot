@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db import models
 from app.services.pdf_parser import extract_text_from_pdf
+from app.services.table_extractor import extract_tables_from_pdf
 from app.services.chunker import chunk_pages
 from app.services.vector_store import add_chunks
 from app.services.bm25_retriever import invalidate_bm25_index
@@ -56,11 +57,22 @@ def upload_document(
         f.write(file_bytes)
 
     try:
-        pages = extract_text_from_pdf(str(save_path), display_name=file.filename)
+        from app.services.pdf_parser import PasswordProtectedPDFError, CorruptPDFError
+        try:
+            pages = extract_text_from_pdf(str(save_path), display_name=file.filename)
+        except PasswordProtectedPDFError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        except CorruptPDFError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
         if not pages:
             raise HTTPException(status_code=422, detail="No extractable text found in this PDF.")
 
-        chunks = chunk_pages(pages)
+        # Best-effort: a PDF with no tables just yields an empty list here,
+        # never blocks the upload on its own.
+        table_chunks = extract_tables_from_pdf(str(save_path), display_name=file.filename)
+
+        chunks = chunk_pages(pages, table_chunks=table_chunks)
         chunk_count = add_chunks(chunks, chat_session_id=chat_session_id, db=db)
         invalidate_bm25_index(chat_session_id)
 

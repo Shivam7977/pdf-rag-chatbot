@@ -59,6 +59,8 @@ class DocumentChunk(Base):
     page = Column(Integer, nullable=False)
     text = Column(Text, nullable=False)
     embedding = Column(Vector(EMBEDDING_DIM), nullable=False)
+    element_type = Column(String, default="text", nullable=False)  # "text" | "table" (more types as Phase 4 adds them)
+    section_title = Column(String, nullable=True)  # nearest heading this chunk falls under, if any
 
     chat_session = relationship("ChatSession", back_populates="chunks")
 

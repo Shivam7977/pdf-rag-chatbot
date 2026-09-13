@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 pymupdf
+pdfplumber
 langchain
 langchain-text-splitters
 sentence-transformers
@@ -13,8 +14,10 @@ sqlalchemy
 psycopg2-binary
 pgvector
 passlib[bcrypt]
+bcrypt==4.0.1
 python-jose[cryptography]
 google-auth
 email-validator
 resend
-bcrypt==4.0.1
+pytesseract
+pillow

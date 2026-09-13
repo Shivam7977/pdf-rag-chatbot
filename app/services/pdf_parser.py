@@ -1,25 +1,177 @@
 import pymupdf as fitz
+import pytesseract
+from PIL import Image
+import io
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+HEADING_SCORE_THRESHOLD = 3  # tune this after testing across a few PDFs
+
+
+class PasswordProtectedPDFError(Exception):
+    pass
+
+
+class CorruptPDFError(Exception):
+    pass
+
+
+def _get_body_font_size(page) -> float:
+    sizes = {}
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                size = round(span["size"])
+                sizes[size] = sizes.get(size, 0) + len(span["text"])
+    if not sizes:
+        return 10.0
+    return max(sizes, key=sizes.get)
+
+
+def _heading_score(text: str, avg_size: float, is_bold: bool, body_size: float) -> int:
+    """
+    Multiple weak signals combined into one score, rather than any single
+    signal (like "is it bold?") deciding alone — this is what avoids the
+    false positive we saw earlier, where a bolded but normal-length
+    sentence got wrongly tagged as a heading.
+    """
+    score = 0
+    word_count = len(text.split())
+
+    size_ratio = avg_size / body_size
+    if size_ratio >= 1.3:
+        score += 3
+    elif size_ratio >= 1.15:
+        score += 2
+    elif size_ratio >= 1.05:
+        score += 1
+
+    if is_bold:
+        score += 1
+
+    if word_count <= 8:
+        score += 1
+    if word_count > 15:
+        score -= 3  # long lines are very unlikely to be real headings, regardless of styling
+
+    stripped = text.rstrip()
+    if stripped.endswith((".", ",", ";", ":")):
+        score -= 2  # headings rarely end with sentence-level punctuation
+
+    if text.isupper() and word_count <= 10:
+        score += 1
+
+    return score
+
+
+def _extract_structured_text(page, body_size: float) -> str:
+    blocks = [b for b in page.get_text("dict")["blocks"] if b.get("lines")]
+    if not blocks:
+        return ""
+
+    page_width = page.rect.width
+    midpoint = page_width / 2
+
+    left_blocks = [b for b in blocks if b["bbox"][0] < midpoint]
+    right_blocks = [b for b in blocks if b["bbox"][0] >= midpoint]
+    is_two_column = len(left_blocks) >= 2 and len(right_blocks) >= 2
+
+    if is_two_column:
+        ordered_blocks = sorted(left_blocks, key=lambda b: b["bbox"][1]) + \
+                          sorted(right_blocks, key=lambda b: b["bbox"][1])
+    else:
+        ordered_blocks = sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0]))
+
+    # First pass: score every line individually.
+    scored_lines = []
+    for block_index, block in enumerate(ordered_blocks):
+        for line in block["lines"]:
+            spans = line.get("spans", [])
+            if not spans:
+                continue
+            line_text = "".join(s["text"] for s in spans).strip()
+            if not line_text:
+                continue
+
+            avg_size = sum(s["size"] for s in spans) / len(spans)
+            is_bold = any("bold" in s.get("font", "").lower() for s in spans)
+            score = _heading_score(line_text, avg_size, is_bold, body_size)
+
+            scored_lines.append({
+                "text": line_text,
+                "is_heading": score >= HEADING_SCORE_THRESHOLD,
+                "block_index": block_index,
+            })
+
+    # Second pass: merge CONSECUTIVE heading-scored lines into one heading
+    # block instead of prefixing "# " on each fragment separately — a
+    # heading that wraps across 2-3 short lines (common in narrow columns)
+    # should read as one heading, not several stacked "# " lines.
+    output_lines = []
+    buffer = []
+    buffer_block_index = None
+    MAX_HEADING_WORDS = 20  # a merged heading block this long is almost never a real heading
+
+    def flush_buffer():
+        nonlocal buffer_block_index
+        if buffer:
+            merged_text = " ".join(buffer)
+            if len(merged_text.split()) <= MAX_HEADING_WORDS:
+                output_lines.append("# " + merged_text)
+            else:
+                # too long after merging — likely a wrapped body paragraph/pull-quote,
+                # not a real heading, so emit the original lines as normal text
+                output_lines.extend(buffer)
+            buffer.clear()
+        buffer_block_index = None
+
+    for entry in scored_lines:
+        if entry["is_heading"]:
+            # a heading line from a different block than what's buffered means
+            # these are two distinct headings that just happen to be adjacent,
+            # not one heading wrapped across lines — flush before starting fresh
+            if buffer and entry["block_index"] != buffer_block_index:
+                flush_buffer()
+            buffer.append(entry["text"])
+            buffer_block_index = entry["block_index"]
+        else:
+            flush_buffer()
+            output_lines.append(entry["text"])
+    flush_buffer()
+
+    return "\n".join(output_lines)
+
+
+def _ocr_page(page) -> str:
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+    img = Image.open(io.BytesIO(pix.tobytes("png")))
+    try:
+        return pytesseract.image_to_string(img)
+    except Exception:
+        return ""
+
 
 def extract_text_from_pdf(file_path: str, display_name: str | None = None):
-    """
-    Extracts text from a PDF, page by page, keeping track of
-    which page each block of text came from (needed later for citations).
-
-    display_name: the filename to show in citations. Pass this explicitly
-    when file_path is a disk-saved path that doesn't match the user-facing
-    filename (e.g. documents.py prefixes it with chat_session_id to avoid
-    collisions on disk) — otherwise the citation would show the messy
-    on-disk name instead of the clean original filename.
-
-    Returns a list of dicts: [{"text": ..., "page": ..., "source": ...}]
-    """
-    doc = fitz.open(file_path)
     filename = display_name or file_path.split("\\")[-1].split("/")[-1]
+
+    try:
+        doc = fitz.open(file_path)
+    except Exception as e:
+        raise CorruptPDFError(f"Couldn't open this PDF — it may be corrupted. ({e})")
+
+    if doc.needs_pass:
+        doc.close()
+        raise PasswordProtectedPDFError("This PDF is password-protected and can't be processed.")
 
     extracted_pages = []
 
     for page_number, page in enumerate(doc, start=1):
-        text = page.get_text()
+        body_size = _get_body_font_size(page)
+        text = _extract_structured_text(page, body_size)
+
+        if not text.strip() and len(page.get_images()) > 0:
+            text = _ocr_page(page)
+
         if text.strip():
             extracted_pages.append({
                 "text": text,
@@ -40,4 +192,4 @@ if __name__ == "__main__":
         pages = extract_text_from_pdf(test_file)
         print(f"Extracted {len(pages)} pages with text.")
         print("--- Preview of page 1 ---")
-        print(pages[0]["text"][:500] if pages else "No text found")
+        print(pages[0]["text"][:800] if pages else "No text found")

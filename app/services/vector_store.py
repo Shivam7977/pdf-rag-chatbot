@@ -15,6 +15,8 @@ def add_chunks(chunks: list, chat_session_id: str, db: Session) -> int:
             page=c["page"],
             text=c["text"],
             embedding=emb,
+            element_type=c.get("element_type", "text"),
+            section_title=c.get("section_title"),
         )
         for c, emb in zip(chunks, embeddings)
     ]
@@ -33,7 +35,10 @@ def query_chunks(query_text: str, chat_session_id: str, top_k: int, db: Session)
         .limit(top_k)
         .all()
     )
-    return [{"text": r.text, "page": r.page, "source": r.filename} for r in rows]
+    return [
+        {"text": r.text, "page": r.page, "source": r.filename, "element_type": r.element_type, "section_title": r.section_title}
+        for r in rows
+    ]
 
 
 def get_all_chunks(chat_session_id: str, db: Session):
@@ -42,7 +47,10 @@ def get_all_chunks(chat_session_id: str, db: Session):
         .filter(models.DocumentChunk.chat_session_id == chat_session_id)
         .all()
     )
-    return [{"text": r.text, "page": r.page, "source": r.filename, "chunk_id": str(r.id)} for r in rows]
+    return [
+        {"text": r.text, "page": r.page, "source": r.filename, "chunk_id": str(r.id), "element_type": r.element_type, "section_title": r.section_title}
+        for r in rows
+    ]
 
 
 def get_document_filenames(chat_session_id: str, db: Session) -> list[str]:
@@ -98,7 +106,10 @@ def get_spread_chunks(chat_session_id: str, db: Session, chunks_per_document: in
         sampled = [file_rows[i] for i in range(0, n, step)][:chunks_per_document]
         grouped.append({
             "filename": filename,
-            "chunks": [{"text": r.text, "page": r.page, "source": r.filename} for r in sampled],
+            "chunks": [
+                {"text": r.text, "page": r.page, "source": r.filename, "element_type": r.element_type, "section_title": r.section_title}
+                for r in sampled
+            ],
         })
 
     return grouped
@@ -130,6 +141,9 @@ def query_chunks_per_document(query_text: str, chat_session_id: str, db: Session
             .limit(top_k_per_doc)
             .all()
         )
-        results.extend([{"text": r.text, "page": r.page, "source": r.filename} for r in rows])
+        results.extend([
+            {"text": r.text, "page": r.page, "source": r.filename, "element_type": r.element_type, "section_title": r.section_title}
+            for r in rows
+        ])
 
     return results
