@@ -9,6 +9,7 @@ from app.db.database import get_db
 from app.db import models
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.table_extractor import extract_tables_from_pdf
+from app.services.visual_extractor import extract_visuals_from_pdf
 from app.services.chunker import chunk_pages
 from app.services.vector_store import add_chunks
 from app.services.bm25_retriever import invalidate_bm25_index
@@ -72,7 +73,18 @@ def upload_document(
         # never blocks the upload on its own.
         table_chunks = extract_tables_from_pdf(str(save_path), display_name=file.filename)
 
-        chunks = chunk_pages(pages, table_chunks=table_chunks)
+        # Best-effort: unlike table extraction, this calls out to an
+        # external vision model (Ollama locally, or Mistral in production)
+        # — that call can genuinely fail for reasons outside our control
+        # (Ollama not running, Mistral API/key issues, rate limits). A
+        # figure/chart failing to describe itself should never block the
+        # whole upload; the document is still useful without it.
+        try:
+            visual_chunks = extract_visuals_from_pdf(str(save_path), display_name=file.filename)
+        except Exception:
+            visual_chunks = []
+
+        chunks = chunk_pages(pages, table_chunks=table_chunks, visual_chunks=visual_chunks)
         chunk_count = add_chunks(chunks, chat_session_id=chat_session_id, db=db)
         invalidate_bm25_index(chat_session_id)
 

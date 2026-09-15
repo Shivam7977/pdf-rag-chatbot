@@ -5,13 +5,13 @@ a Markdown table, and prefixes it with the nearest caption-like text (e.g.
 of being a bare grid of numbers.
 """
 import pdfplumber
+from app.services.caption_utils import find_nearby_caption
 
 # A caption line is usually short and starts with a recognizable label —
 # this keeps the heuristic cheap and avoids grabbing an unrelated paragraph
 # that merely happens to be near the table.
 CAPTION_PREFIXES = ("table", "tab.", "tbl")
 CAPTION_MAX_WORDS = 20
-CAPTION_SEARCH_DISTANCE = 60  # points; how far above/below the table to look
 
 MIN_TABLE_ROWS = 2       # header + at least one data row
 MAX_TABLE_COLUMNS = 12   # real tables in these documents don't run wider than this
@@ -63,47 +63,6 @@ def _is_plausible_table(rows: list[list[str | None]]) -> bool:
         return False
 
     return True
-
-
-def _looks_like_caption(text: str) -> bool:
-    stripped = text.strip().lower()
-    if not stripped:
-        return False
-    if len(stripped.split()) > CAPTION_MAX_WORDS:
-        return False
-    return stripped.startswith(CAPTION_PREFIXES)
-
-
-def _find_caption(page, table_bbox) -> str | None:
-    """
-    Looks at text lines immediately above and below the table's bounding box
-    for something that reads like a caption. Prefers the line above (captions
-    are more commonly placed above a table than below it).
-    """
-    x0, top, x1, bottom = table_bbox
-    words = page.extract_words()
-
-    lines_by_top = {}
-    for w in words:
-        lines_by_top.setdefault(round(w["top"]), []).append(w["text"])
-
-    above_candidates = []
-    below_candidates = []
-    for line_top, line_words in lines_by_top.items():
-        line_text = " ".join(line_words)
-        if top - CAPTION_SEARCH_DISTANCE <= line_top < top:
-            above_candidates.append((top - line_top, line_text))
-        elif bottom < line_top <= bottom + CAPTION_SEARCH_DISTANCE:
-            below_candidates.append((line_top - bottom, line_text))
-
-    for distance, text in sorted(above_candidates):
-        if _looks_like_caption(text):
-            return text.strip()
-    for distance, text in sorted(below_candidates):
-        if _looks_like_caption(text):
-            return text.strip()
-
-    return None
 
 
 def _rows_to_markdown(rows: list[list[str | None]]) -> str:
@@ -163,6 +122,8 @@ def extract_tables_from_page(page, page_number: int, filename: str) -> list[dict
             "horizontal_strategy": "lines",
         })
 
+    caption_words = [{"text": w["text"], "top": w["top"]} for w in page.extract_words()]
+
     for table in found_tables:
         rows = table.extract()
         if not _is_plausible_table(rows):
@@ -172,7 +133,7 @@ def extract_tables_from_page(page, page_number: int, filename: str) -> list[dict
         if not markdown:
             continue
 
-        caption = _find_caption(page, table.bbox)
+        caption = find_nearby_caption(caption_words, table.bbox, CAPTION_PREFIXES, CAPTION_MAX_WORDS)
         text = f"{caption}\n\n{markdown}" if caption else markdown
 
         results.append({

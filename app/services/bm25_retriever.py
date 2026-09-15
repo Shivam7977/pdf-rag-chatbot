@@ -55,5 +55,7 @@ def bm25_search(query: str, chat_session_id: str, db: Session, top_k: int = 20):
             "source": c["source"],
             "chunk_id": c["chunk_id"],
             "bm25_rank": rank + 1,
+            "element_type": c.get("element_type"),
+            "section_title": c.get("section_title"),
         })
     return results

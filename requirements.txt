@@ -21,3 +21,4 @@ email-validator
 resend
 pytesseract
 pillow
+mistralai

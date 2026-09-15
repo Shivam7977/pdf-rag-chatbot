@@ -38,18 +38,20 @@ def _split_into_sections(text: str):
     return sections
 
 
-def chunk_pages(pages: list, table_chunks: list | None = None, chunk_size: int = 512, chunk_overlap: int = 100):
+def chunk_pages(pages: list, table_chunks: list | None = None, visual_chunks: list | None = None, chunk_size: int = 512, chunk_overlap: int = 100):
     """
     Takes the output of extract_text_from_pdf() (and optionally
-    extract_tables_from_pdf()) and produces the final list of chunks to
-    embed and store.
+    extract_tables_from_pdf() / extract_visuals_from_pdf()) and produces the
+    final list of chunks to embed and store.
 
     Text chunks: split heading-aware (section boundaries are respected, a
     chunk never straddles two sections) and tagged with section_title.
 
-    Table chunks: passed through UNCHANGED — never run through the
-    character splitter, since breaking a table across chunks would corrupt
-    its structure. Each keeps its own element_type="table".
+    Table chunks and visual chunks: passed through UNCHANGED — never run
+    through the character splitter (breaking a table or a figure's
+    description across chunks would corrupt it). Each keeps whatever
+    element_type it already carries (table_extractor sets "table";
+    visual_extractor sets "image" or "chart").
 
     NOTE: chunk_size/chunk_overlap are measured in CHARACTERS, not tokens.
     We'll revisit sizing once we have an evaluation harness (Phase 6).
@@ -89,20 +91,28 @@ def chunk_pages(pages: list, table_chunks: list | None = None, chunk_size: int =
                 })
                 chunk_index += 1
 
-    if table_chunks:
-        for i, t in enumerate(table_chunks, start=1):
-            doc_id = _get_document_id(t["source"])
+    # Table and visual (image/chart) chunks pass through unmodified — never
+    # split, kept as their own chunk. Each already carries its own
+    # element_type from its extractor, so we respect that instead of
+    # hardcoding one — a "tbl"/"vis" id-suffix keeps chunk_ids distinct and
+    # collision-free between the two.
+    for id_suffix, extra_chunks, default_type in (("tbl", table_chunks, "table"), ("vis", visual_chunks, "figure")):
+        if not extra_chunks:
+            continue
+        for i, c in enumerate(extra_chunks, start=1):
+            doc_id = _get_document_id(c["source"])
             all_chunks.append({
-                "chunk_id": f"{doc_id}_p{t['page']}_tbl{i}",
-                "text": t["text"],
-                "page": t["page"],
-                "source": t["source"],
-                # Not inheriting the nearest heading here yet — table captions
-                # already carry their own context (see table_extractor.py).
-                # Could attach the surrounding section_title too if retrieval
-                # testing later shows it's needed.
+                "chunk_id": f"{doc_id}_p{c['page']}_{id_suffix}{i}",
+                "text": c["text"],
+                "page": c["page"],
+                "source": c["source"],
+                # Not inheriting the nearest heading here yet — table/figure
+                # captions already carry their own context (see
+                # table_extractor.py / visual_extractor.py). Could attach
+                # the surrounding section_title too if retrieval testing
+                # later shows it's needed.
                 "section_title": None,
-                "element_type": "table",
+                "element_type": c.get("element_type", default_type),
             })
 
     return all_chunks
