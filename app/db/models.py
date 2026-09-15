@@ -18,6 +18,9 @@ class User(Base):
     is_verified = Column(Boolean, default=False, nullable=False)
     verification_code = Column(String, nullable=True)
     verification_code_expires_at = Column(DateTime, nullable=True)
+    verification_attempts = Column(Integer, default=0, nullable=False)
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    lockout_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     chat_sessions = relationship("ChatSession", back_populates="user")
@@ -59,8 +62,8 @@ class DocumentChunk(Base):
     page = Column(Integer, nullable=False)
     text = Column(Text, nullable=False)
     embedding = Column(Vector(EMBEDDING_DIM), nullable=False)
-    element_type = Column(String, default="text", nullable=False)  # "text" | "table" (more types as Phase 4 adds them)
-    section_title = Column(String, nullable=True)  # nearest heading this chunk falls under, if any
+    element_type = Column(String, default="text", nullable=False)
+    section_title = Column(String, nullable=True)
 
     chat_session = relationship("ChatSession", back_populates="chunks")
 
@@ -70,7 +73,7 @@ class Document(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     chat_session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False)
     filename = Column(String, nullable=False)
-    display_title = Column(String, nullable=True)  # LLM-extracted topic/title, for natural-language matching
+    display_title = Column(String, nullable=True)
     content_type = Column(String, default="application/pdf")
     data = Column(LargeBinary, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

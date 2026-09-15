@@ -1,3 +1,4 @@
+from uuid import UUID
 from fastapi import Depends, Header
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -16,4 +17,8 @@ def get_current_user(
     user_id = decode_access_token(authorization.removeprefix("Bearer ").strip())
     if not user_id:
         return None
-    return db.query(models.User).filter(models.User.id == user_id).first()
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        return None
+    return db.query(models.User).filter(models.User.id == user_uuid).first()

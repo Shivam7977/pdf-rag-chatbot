@@ -1,19 +1,34 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class SignupRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
 
 
 class VerifyCodeRequest(BaseModel):
     email: EmailStr
     code: str
 
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
 
 
 class GoogleLoginRequest(BaseModel):
@@ -21,7 +36,7 @@ class GoogleLoginRequest(BaseModel):
 
 
 class SetPasswordRequest(BaseModel):
-    password: str
+    password: str = Field(min_length=8, max_length=128)
 
 
 class TokenResponse(BaseModel):

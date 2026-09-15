@@ -1,11 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from google.auth.exceptions import GoogleAuthError
 
 from app.db.database import get_db
 from app.db import models
 from app.schemas.auth import SignupRequest, VerifyCodeRequest, LoginRequest, GoogleLoginRequest, SetPasswordRequest, TokenResponse
-from app.services.security import hash_password, verify_password, create_access_token, verify_google_token, generate_verification_code
+from app.services.security import (
+    hash_password, verify_password, create_access_token, verify_google_token,
+    generate_verification_code, hash_verification_code, verify_verification_code,
+    MAX_VERIFICATION_ATTEMPTS, MAX_LOGIN_ATTEMPTS, LOGIN_LOCKOUT_MINUTES,
+)
 from app.services.cleanup import cleanup_stale_guests
 from app.services.email import send_welcome_email, send_verification_email
 from app.api.deps import get_current_user
@@ -20,20 +25,20 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="An account with this email already exists.")
 
     code, expires_at = generate_verification_code()
+    code_hash = hash_verification_code(code)
 
     if existing:
-        # Unverified leftover from a previous signup attempt — overwrite it
-        # with the new password/code instead of creating a duplicate row.
         existing.password_hash = hash_password(payload.password)
-        existing.verification_code = code
+        existing.verification_code = code_hash
         existing.verification_code_expires_at = expires_at
+        existing.verification_attempts = 0
         db.commit()
     else:
         user = models.User(
             email=payload.email,
             password_hash=hash_password(payload.password),
             is_verified=False,
-            verification_code=code,
+            verification_code=code_hash,
             verification_code_expires_at=expires_at,
         )
         db.add(user)
@@ -52,12 +57,21 @@ def verify_signup(payload: VerifyCodeRequest, db: Session = Depends(get_db)):
     if user.verification_code_expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="This code has expired. Please sign up again.")
 
-    if user.verification_code != payload.code:
+    if user.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
+        user.verification_code = None
+        user.verification_code_expires_at = None
+        db.commit()
+        raise HTTPException(status_code=400, detail="Too many incorrect attempts. Please sign up again.")
+
+    if not verify_verification_code(payload.code, user.verification_code):
+        user.verification_attempts += 1
+        db.commit()
         raise HTTPException(status_code=400, detail="Incorrect code.")
 
     user.is_verified = True
     user.verification_code = None
     user.verification_code_expires_at = None
+    user.verification_attempts = 0
     db.commit()
 
     send_welcome_email(user.email)
@@ -68,10 +82,28 @@ def verify_signup(payload: VerifyCodeRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+    if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Incorrect email or password.")
+
+    if user.lockout_until and user.lockout_until > datetime.utcnow():
+        remaining = int((user.lockout_until - datetime.utcnow()).total_seconds() // 60) + 1
+        raise HTTPException(status_code=403, detail=f"Too many failed attempts. Try again in {remaining} minute(s).")
+
+    if not verify_password(payload.password, user.password_hash):
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS:
+            user.lockout_until = datetime.utcnow() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+            user.failed_login_attempts = 0
+        db.commit()
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+
     if not user.is_verified:
         raise HTTPException(status_code=403, detail="Please verify your email before logging in.")
+
+    user.failed_login_attempts = 0
+    user.lockout_until = None
+    db.commit()
+
     return TokenResponse(access_token=create_access_token(str(user.id)))
 
 
@@ -79,14 +111,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
         info = verify_google_token(payload.id_token)
-    except ValueError:
+    except (ValueError, GoogleAuthError):
         raise HTTPException(status_code=401, detail="Invalid Google token.")
 
     email, google_id = info["email"], info["sub"]
     user = db.query(models.User).filter(models.User.email == email).first()
     is_new_user = False
     if not user:
-        # Google has already verified this email address itself.
         user = models.User(email=email, google_id=google_id, is_verified=True)
         db.add(user)
         db.commit()
