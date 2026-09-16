@@ -1,4 +1,5 @@
 import json
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -6,6 +7,7 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.db import models
 from app.api.deps import get_current_user
+from app.services.bm25_retriever import invalidate_bm25_index
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
@@ -53,8 +55,15 @@ def list_chats(db: Session = Depends(get_db), user: models.User | None = Depends
     ]
 
 
+# NOTE: chat_session_id is typed as UUID (not str) on every route below —
+# FastAPI validates the path-param format before the handler ever runs, so
+# a malformed ID gets a clean 422 instead of reaching a DB query raw (same
+# fix already applied to schemas/chat.py). Converted to str() only at the
+# specific call site that needs it (invalidate_bm25_index, which is keyed
+# by plain strings — see the note in chat.py).
+
 @router.get("/{chat_session_id}")
-def get_chat(chat_session_id: str, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
+def get_chat(chat_session_id: UUID, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
     session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
     _check_ownership(session, user)
 
@@ -92,7 +101,7 @@ def get_chat(chat_session_id: str, db: Session = Depends(get_db), user: models.U
 
 
 @router.patch("/{chat_session_id}")
-def rename_chat(chat_session_id: str, payload: RenameChatRequest, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
+def rename_chat(chat_session_id: UUID, payload: RenameChatRequest, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
     session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
     _check_ownership(session, user)
 
@@ -106,7 +115,7 @@ def rename_chat(chat_session_id: str, payload: RenameChatRequest, db: Session = 
 
 
 @router.get("/{chat_session_id}/documents/{filename}")
-def get_document_file(chat_session_id: str, filename: str, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
+def get_document_file(chat_session_id: UUID, filename: str, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
     session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
     _check_ownership(session, user)
 
@@ -122,10 +131,16 @@ def get_document_file(chat_session_id: str, filename: str, db: Session = Depends
 
 
 @router.delete("/{chat_session_id}")
-def delete_chat(chat_session_id: str, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
+def delete_chat(chat_session_id: UUID, db: Session = Depends(get_db), user: models.User | None = Depends(get_current_user)):
     session = db.query(models.ChatSession).filter(models.ChatSession.id == chat_session_id).first()
     _check_ownership(session, user)
 
     db.delete(session)
     db.commit()
+
+    # Was missing before — the in-memory BM25 index for this session would
+    # otherwise outlive the (now-deleted) session's data until server
+    # restart, wasting memory indefinitely on a long-running server.
+    invalidate_bm25_index(str(chat_session_id))
+
     return {"status": "deleted"}

@@ -2,12 +2,23 @@ from sentence_transformers import CrossEncoder
 
 _reranker_model = None
 
+# SECURITY: pin to a specific commit rather than "main" (the implicit
+# default) — an unpinned model pull is a supply-chain risk: if the repo
+# owner (or anyone with write access) ever pushes a different/malicious
+# model to "main", the next server restart would silently pull it in.
+# Pinning to a known-good commit means the model can only ever change when
+# this hash is deliberately updated. Current HEAD of main as of this pin:
+# https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2/commit/b2cfda5
+_RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+_RERANKER_MODEL_REVISION = "b2cfda50a1a9fc7919e7444afbb52610d268af92"
+
+
 def get_reranker_model():
     global _reranker_model
     if _reranker_model is None:
         # ye ek chhota, fast cross-encoder model hai — 
         # specifically relevance scoring ke liye train kiya gaya hai
-        _reranker_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        _reranker_model = CrossEncoder(_RERANKER_MODEL_NAME, revision=_RERANKER_MODEL_REVISION)
     return _reranker_model
 
 

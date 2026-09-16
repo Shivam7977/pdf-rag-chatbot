@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -22,6 +22,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """
+    Baseline security headers on every response — API and the
+    StaticFiles-served frontend alike. None of these require any
+    request-specific logic, so a single blanket middleware covers both.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"  # stop browsers from MIME-sniffing a response into executing as something it isn't
+    response.headers["X-Frame-Options"] = "DENY"  # this app is never meant to be iframed elsewhere — blocks clickjacking
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"  # limits what leaks to third-party referrers on outbound links/requests
+    return response
+
 
 app.include_router(auth_router)
 app.include_router(chats_router)

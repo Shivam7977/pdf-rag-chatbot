@@ -29,6 +29,14 @@ MIN_IMAGE_DIMENSION_PX = 150
 CLUSTER_MERGE_DISTANCE = 15
 MIN_DRAWINGS_PER_CHART = 8
 
+# SECURITY / COST: without a cap, a PDF containing an excessive number of
+# images/charts would trigger one vision-model API call per visual with no
+# limit — a real cost-abuse vector once MISTRAL_API_KEY is live in
+# production (each call costs money). Candidates beyond this count are
+# simply skipped (kept in page order), so a document still gets useful
+# visual-content coverage rather than failing outright.
+MAX_VISUALS_PER_DOCUMENT = 20
+
 
 def _extract_raster_images(page, doc, page_number: int) -> list[dict]:
     """Finds embedded raster images (photos, scanned figures, logos-sized-up, etc.)."""
@@ -142,6 +150,11 @@ def extract_visuals_from_pdf(file_path: str, display_name: str | None = None) ->
     if not candidates:
         doc.close()
         return []
+
+    if len(candidates) > MAX_VISUALS_PER_DOCUMENT:
+        print(f"[visual_extractor] {filename} has {len(candidates)} visual candidates, "
+              f"capping to {MAX_VISUALS_PER_DOCUMENT} (page order) to bound vision-model calls.")
+        candidates = candidates[:MAX_VISUALS_PER_DOCUMENT]
 
     # Best-effort caption lookup per candidate, using its own page.
     # PyMuPDF's get_text("words") returns tuples (x0, y0, x1, y1, word, ...);

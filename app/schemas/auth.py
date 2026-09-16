@@ -1,34 +1,24 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field
 
 
 class SignupRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, v: str) -> str:
-        return v.lower()
+    password: str = Field(min_length=8)
 
 
 class VerifyCodeRequest(BaseModel):
     email: EmailStr
     code: str
 
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, v: str) -> str:
-        return v.lower()
-
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1, max_length=128)
-
-    @field_validator("email")
-    @classmethod
-    def normalize_email(cls, v: str) -> str:
-        return v.lower()
+    # No min_length here (unlike SignupRequest/SetPasswordRequest) — this
+    # validates an EXISTING password being submitted for login, not a new
+    # one being created. Enforcing a length-minimum here would wrongly
+    # reject correct logins for any account whose password predates this
+    # policy.
+    password: str
 
 
 class GoogleLoginRequest(BaseModel):
@@ -36,7 +26,7 @@ class GoogleLoginRequest(BaseModel):
 
 
 class SetPasswordRequest(BaseModel):
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8)
 
 
 class TokenResponse(BaseModel):

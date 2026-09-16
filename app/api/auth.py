@@ -1,21 +1,21 @@
+import secrets
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from google.auth.exceptions import GoogleAuthError
 
 from app.db.database import get_db
 from app.db import models
 from app.schemas.auth import SignupRequest, VerifyCodeRequest, LoginRequest, GoogleLoginRequest, SetPasswordRequest, TokenResponse
-from app.services.security import (
-    hash_password, verify_password, create_access_token, verify_google_token,
-    generate_verification_code, hash_verification_code, verify_verification_code,
-    MAX_VERIFICATION_ATTEMPTS, MAX_LOGIN_ATTEMPTS, LOGIN_LOCKOUT_MINUTES,
-)
+from app.services.security import hash_password, verify_password, create_access_token, verify_google_token, generate_verification_code
 from app.services.cleanup import cleanup_stale_guests
 from app.services.email import send_welcome_email, send_verification_email
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+MAX_VERIFICATION_ATTEMPTS = 5
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
 
 
 @router.post("/signup")
@@ -25,11 +25,15 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="An account with this email already exists.")
 
     code, expires_at = generate_verification_code()
-    code_hash = hash_verification_code(code)
 
     if existing:
+        # Unverified leftover from a previous signup attempt — overwrite it
+        # with the new password/code instead of creating a duplicate row.
+        # Also reset verification_attempts: this is a fresh code, so a
+        # previous run of guesses against the old code shouldn't count
+        # against the new one.
         existing.password_hash = hash_password(payload.password)
-        existing.verification_code = code_hash
+        existing.verification_code = code
         existing.verification_code_expires_at = expires_at
         existing.verification_attempts = 0
         db.commit()
@@ -38,7 +42,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
             email=payload.email,
             password_hash=hash_password(payload.password),
             is_verified=False,
-            verification_code=code_hash,
+            verification_code=code,
             verification_code_expires_at=expires_at,
         )
         db.add(user)
@@ -57,13 +61,17 @@ def verify_signup(payload: VerifyCodeRequest, db: Session = Depends(get_db)):
     if user.verification_code_expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="This code has expired. Please sign up again.")
 
+    # SECURITY: brute-force protection — a 6-digit code is only ~1M
+    # possibilities; without a cap, it's trivially guessable within the
+    # 15-minute TTL. Once exhausted, the user must request a fresh code
+    # (via /signup again) rather than keep guessing this one.
     if user.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
-        user.verification_code = None
-        user.verification_code_expires_at = None
-        db.commit()
-        raise HTTPException(status_code=400, detail="Too many incorrect attempts. Please sign up again.")
+        raise HTTPException(status_code=429, detail="Too many incorrect attempts. Please sign up again to get a new code.")
 
-    if not verify_verification_code(payload.code, user.verification_code):
+    # SECURITY: constant-time comparison — a plain `!=` leaks a timing
+    # signal about how many leading characters matched, which is an
+    # (admittedly minor, given the attempt-cap above) side-channel.
+    if not secrets.compare_digest(user.verification_code, payload.code):
         user.verification_attempts += 1
         db.commit()
         raise HTTPException(status_code=400, detail="Incorrect code.")
@@ -82,19 +90,21 @@ def verify_signup(payload: VerifyCodeRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if not user or not user.password_hash:
-        raise HTTPException(status_code=401, detail="Incorrect email or password.")
 
-    if user.lockout_until and user.lockout_until > datetime.utcnow():
-        remaining = int((user.lockout_until - datetime.utcnow()).total_seconds() // 60) + 1
-        raise HTTPException(status_code=403, detail=f"Too many failed attempts. Try again in {remaining} minute(s).")
+    # SECURITY: brute-force protection on password guessing. Checked before
+    # the password comparison itself so a locked-out account can't be
+    # guessed against at all while locked.
+    if user and user.lockout_until and user.lockout_until > datetime.utcnow():
+        remaining_minutes = max(1, int((user.lockout_until - datetime.utcnow()).total_seconds() // 60) + 1)
+        raise HTTPException(status_code=429, detail=f"Too many failed attempts. Try again in {remaining_minutes} minute(s).")
 
-    if not verify_password(payload.password, user.password_hash):
-        user.failed_login_attempts += 1
-        if user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS:
-            user.lockout_until = datetime.utcnow() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
-            user.failed_login_attempts = 0
-        db.commit()
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+        if user:
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS:
+                user.lockout_until = datetime.utcnow() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+                user.failed_login_attempts = 0  # counter resets; lockout_until now gates further attempts
+            db.commit()
         raise HTTPException(status_code=401, detail="Incorrect email or password.")
 
     if not user.is_verified:
@@ -111,13 +121,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
         info = verify_google_token(payload.id_token)
-    except (ValueError, GoogleAuthError):
+    except Exception as e:
+        # Broadened from `except ValueError` — google-auth's verify_oauth2_token
+        # can raise other exception types too (network/cert issues, its own
+        # GoogleAuthError subclasses), which would otherwise surface as an
+        # unhandled 500 with internal details instead of a clean 401.
+        print(f"[auth.google_login] Token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid Google token.")
 
     email, google_id = info["email"], info["sub"]
     user = db.query(models.User).filter(models.User.email == email).first()
     is_new_user = False
     if not user:
+        # Google has already verified this email address itself.
         user = models.User(email=email, google_id=google_id, is_verified=True)
         db.add(user)
         db.commit()
@@ -136,6 +152,20 @@ def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/guest")
 def start_guest_session(db: Session = Depends(get_db)):
+    # SECURITY MODEL (by design, not an oversight): guest chat sessions are
+    # protected ONLY by their UUID being unguessable (128-bit, cryptographically
+    # random) — there is no additional auth check for guest sessions anywhere
+    # in the app (see the `session.user_id is not None` gate in documents.py /
+    # chat.py / chats.py, which only applies to logged-in-owned sessions).
+    # This mirrors the common "anyone with the link" pattern (e.g. Google Docs
+    # link-sharing) and keeps the guest flow frictionless — no account needed.
+    # The tradeoff: if a guest session's UUID ever leaks (shared link, browser
+    # history, a referrer header, server access logs), whoever has it can read
+    # and upload to that session. Guest data is also capped at 50MB and
+    # auto-deleted after 24h of inactivity (see cleanup.py), which bounds the
+    # exposure window and blast radius. If stronger guest-isolation is ever
+    # needed, layer in a second secret (e.g. an HttpOnly session cookie)
+    # rather than relying on the UUID alone.
     cleanup_stale_guests(db)
     session = models.ChatSession(is_guest=True, user_id=None)
     db.add(session)

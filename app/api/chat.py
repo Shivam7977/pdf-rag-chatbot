@@ -15,6 +15,7 @@ router = APIRouter()
 
 RERANK_CONFIDENCE_THRESHOLD = -3.0
 NO_ANSWER_MESSAGE = "I couldn't find this in the uploaded documents."
+GENERATION_ERROR_MESSAGE = "Something went wrong while generating a response. Please try again."
 HISTORY_LOOKBACK = 4
 
 
@@ -39,7 +40,7 @@ def _flatten_for_sources(chunks) -> list:
     return chunks
 
 
-def stream_chat_response(question: str, chat_session_id: str):
+def stream_chat_response(question: str, chat_session_id):
     db = SessionLocal()
     try:
         recent_messages = (
@@ -105,8 +106,13 @@ def stream_chat_response(question: str, chat_session_id: str):
             save_message("assistant", answer_text, json.dumps(sources_out))
 
         except Exception as e:
-            yield sse_event("error", {"message": str(e)})
-            save_message("assistant", f"[error] {str(e)}", "[]")
+            # SECURITY: never leak the raw exception to the client — it can
+            # contain internal details (file paths, DB/library internals,
+            # provider error bodies). Log the real error server-side for
+            # debugging; the client only ever sees a generic message.
+            print(f"[chat.stream_chat_response] Unexpected error for session {chat_session_id}: {e}")
+            yield sse_event("error", {"message": GENERATION_ERROR_MESSAGE})
+            save_message("assistant", GENERATION_ERROR_MESSAGE, "[]")
     finally:
         db.close()
 
@@ -125,6 +131,13 @@ def chat(
         raise HTTPException(status_code=403, detail="This chat belongs to another account.")
 
     return StreamingResponse(
-        stream_chat_response(request.question, request.chat_session_id),
+        # Validated as UUID by Pydantic above (malformed input already
+        # rejected with a clean 422) — converted back to str here so it
+        # stays consistent with documents.py's string-typed chat_session_id
+        # (Form field), since bm25_retriever's in-memory cache is keyed by
+        # plain strings. A UUID object and its string form don't hash equal
+        # in Python, so mixing the two types across entry points would
+        # silently break cache invalidation.
+        stream_chat_response(request.question, str(request.chat_session_id)),
         media_type="text/event-stream",
     )
