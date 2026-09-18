@@ -665,13 +665,13 @@ section {
   color: var(--color-accent-ink);
 }
 
-#auth-form, #verify-form {
+#auth-form, #verify-form, #forgot-form, #reset-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-#auth-form input, #verify-form input {
+#auth-form input, #verify-form input, #forgot-form input, #reset-form input {
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -679,6 +679,21 @@ section {
 }
 
 .auth-submit { width: 100%; margin-top: var(--space-1); }
+
+.auth-forgot-link {
+  align-self: flex-end;
+  font-size: 0.85rem;
+  padding: 0;
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.auth-back-link {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 0.85rem;
+  margin-top: var(--space-4);
+}
 
 .auth-error {
   color: var(--color-error);
@@ -1351,53 +1366,6 @@ section {
 .confidence-badge.is-low {
   background: #FCE9DE;
   color: var(--color-error);
-}
-
-/* ============================================
-   FIXED-HEIGHT CHAT (like ChatGPT/Claude) — desktop only
-   ============================================ */
-@media (min-width: 860px) {
-  .app-main {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  #demo {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    padding-bottom: 0;
-  }
-
-  #demo .wrap {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  #demo .demo-grid {
-    flex: 1;
-    overflow: hidden;
-    align-items: stretch;
-    grid-template-rows: minmax(0, 1fr);
-  }
-
-  .panel-topics {
-    align-self: start; /* upload box stays its natural compact size */
-  }
-
-  .panel-chat {
-    height: 100%;
-    min-height: 0; /* flexbox gotcha — without this, overflow:auto below won't kick in */
-  }
-
-  .chat-log {
-    min-height: 0;
-  }
 }
 
 /* ============================================

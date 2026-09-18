@@ -21,6 +21,9 @@ class User(Base):
     verification_attempts = Column(Integer, default=0, nullable=False)  # brute-force protection on /verify-signup
     failed_login_attempts = Column(Integer, default=0, nullable=False)  # brute-force protection on /login
     lockout_until = Column(DateTime, nullable=True)  # set once failed_login_attempts hits the threshold
+    reset_code = Column(String, nullable=True)  # kept separate from verification_code — different flow/concern
+    reset_code_expires_at = Column(DateTime, nullable=True)
+    reset_attempts = Column(Integer, default=0, nullable=False)  # brute-force protection on /reset-password
     created_at = Column(DateTime, default=datetime.utcnow)
 
     chat_sessions = relationship("ChatSession", back_populates="user")

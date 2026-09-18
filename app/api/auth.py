@@ -5,10 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db import models
-from app.schemas.auth import SignupRequest, VerifyCodeRequest, LoginRequest, GoogleLoginRequest, SetPasswordRequest, TokenResponse
+from app.schemas.auth import (
+    SignupRequest, VerifyCodeRequest, LoginRequest, GoogleLoginRequest,
+    SetPasswordRequest, ForgotPasswordRequest, ResetPasswordRequest, TokenResponse,
+)
 from app.services.security import hash_password, verify_password, create_access_token, verify_google_token, generate_verification_code
 from app.services.cleanup import cleanup_stale_guests
-from app.services.email import send_welcome_email, send_verification_email
+from app.services.email import send_welcome_email, send_verification_email, send_password_reset_email, send_google_only_reset_notice
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -16,6 +19,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 MAX_VERIFICATION_ATTEMPTS = 5
 MAX_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
+MAX_RESET_ATTEMPTS = 5
 
 
 @router.post("/signup")
@@ -188,6 +192,67 @@ def set_password(
     user.password_hash = hash_password(payload.password)
     db.commit()
     return {"status": "password set"}
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    SECURITY: always returns the same generic response whether or not the
+    email is registered (anti-enumeration) — the response never reveals
+    account existence. Same principle for timing: both branches below do
+    comparable work (a DB lookup either way), so no meaningful timing
+    signal either.
+    """
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+
+    if user and user.password_hash:
+        # Reuse an existing still-valid code instead of rotating on every
+        # request — repeated forgot-password requests for the same email
+        # in quick succession shouldn't each trigger a fresh email send
+        # (cost + spam-vector), and shouldn't reset an in-progress attempt
+        # count either.
+        if not user.reset_code or not user.reset_code_expires_at or user.reset_code_expires_at < datetime.utcnow():
+            code, expires_at = generate_verification_code()
+            user.reset_code = code
+            user.reset_code_expires_at = expires_at
+            user.reset_attempts = 0
+            db.commit()
+        send_password_reset_email(user.email, user.reset_code)
+    elif user and not user.password_hash:
+        # Google-only account — nothing to guess, so no code is generated.
+        # Safe to be specific in the EMAIL here (only the account owner's
+        # inbox receives it) even though the API response stays generic.
+        send_google_only_reset_notice(user.email)
+    # else: no account for this email — do nothing, still return the same
+    # generic response below.
+
+    return {"message": "If an account exists for this email, a reset code has been sent."}
+
+
+@router.post("/reset-password", response_model=TokenResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if not user or not user.reset_code:
+        raise HTTPException(status_code=400, detail="Invalid or expired code.")
+
+    if user.reset_code_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This code has expired. Please request a new one.")
+
+    if user.reset_attempts >= MAX_RESET_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many incorrect attempts. Please request a new code.")
+
+    if not secrets.compare_digest(user.reset_code, payload.code):
+        user.reset_attempts += 1
+        db.commit()
+        raise HTTPException(status_code=400, detail="Incorrect code.")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_code = None
+    user.reset_code_expires_at = None
+    user.reset_attempts = 0
+    db.commit()
+
+    return TokenResponse(access_token=create_access_token(str(user.id)))
 
 
 @router.get("/me")

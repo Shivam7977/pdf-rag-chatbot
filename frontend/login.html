@@ -24,6 +24,7 @@
       <form id="auth-form">
         <input type="email" id="auth-email" placeholder="Email" required autocomplete="email" />
         <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password" />
+        <button type="button" class="btn-text auth-forgot-link" id="forgot-link">Forgot password?</button>
         <div id="auth-error" class="auth-error" hidden></div>
         <button type="submit" class="btn btn-primary auth-submit" id="auth-submit">Log in</button>
       </form>
@@ -43,6 +44,29 @@
         <div id="verify-error" class="auth-error" hidden></div>
         <button type="submit" class="btn btn-primary auth-submit">Verify</button>
       </form>
+    </div>
+
+    <!-- Step 3: forgot password — enter email -->
+    <div id="auth-step-forgot" hidden>
+      <p class="auth-verify-text">Enter your email and we'll send you a code to reset your password.</p>
+      <form id="forgot-form">
+        <input type="email" id="forgot-email" placeholder="Email" required autocomplete="email" />
+        <div id="forgot-error" class="auth-error" hidden></div>
+        <button type="submit" class="btn btn-primary auth-submit">Send reset code</button>
+      </form>
+      <button type="button" class="btn-text auth-back-link" id="forgot-back-link">Back to log in</button>
+    </div>
+
+    <!-- Step 4: forgot password — enter code + new password -->
+    <div id="auth-step-reset" hidden>
+      <p class="auth-verify-text">Enter the code sent to <span id="reset-email-display"></span> and choose a new password.</p>
+      <form id="reset-form">
+        <input type="text" id="reset-code" placeholder="000000" maxlength="6" inputmode="numeric" required />
+        <input type="password" id="reset-new-password" placeholder="New password" required autocomplete="new-password" />
+        <div id="reset-error" class="auth-error" hidden></div>
+        <button type="submit" class="btn btn-primary auth-submit">Reset password</button>
+      </form>
+      <button type="button" class="btn-text auth-back-link" id="reset-back-link">Back to log in</button>
     </div>
   </div>
 
