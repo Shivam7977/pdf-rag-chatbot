@@ -1,9 +1,13 @@
+import platform
 import pymupdf as fitz
 import pytesseract
 from PIL import Image
 import io
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+if platform.system() == "Windows":
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# On Linux (Render, via Dockerfile), tesseract installs to a location
+# already on PATH, so pytesseract finds it automatically — no path needed.
 
 HEADING_SCORE_THRESHOLD = 3  # tune this after testing across a few PDFs
 
@@ -29,12 +33,6 @@ def _get_body_font_size(page) -> float:
 
 
 def _heading_score(text: str, avg_size: float, is_bold: bool, body_size: float) -> int:
-    """
-    Multiple weak signals combined into one score, rather than any single
-    signal (like "is it bold?") deciding alone — this is what avoids the
-    false positive we saw earlier, where a bolded but normal-length
-    sentence got wrongly tagged as a heading.
-    """
     score = 0
     word_count = len(text.split())
 
@@ -52,11 +50,11 @@ def _heading_score(text: str, avg_size: float, is_bold: bool, body_size: float) 
     if word_count <= 8:
         score += 1
     if word_count > 15:
-        score -= 3  # long lines are very unlikely to be real headings, regardless of styling
+        score -= 3
 
     stripped = text.rstrip()
     if stripped.endswith((".", ",", ";", ":")):
-        score -= 2  # headings rarely end with sentence-level punctuation
+        score -= 2
 
     if text.isupper() and word_count <= 10:
         score += 1
@@ -82,7 +80,6 @@ def _extract_structured_text(page, body_size: float) -> str:
     else:
         ordered_blocks = sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0]))
 
-    # First pass: score every line individually.
     scored_lines = []
     for block_index, block in enumerate(ordered_blocks):
         for line in block["lines"]:
@@ -103,14 +100,10 @@ def _extract_structured_text(page, body_size: float) -> str:
                 "block_index": block_index,
             })
 
-    # Second pass: merge CONSECUTIVE heading-scored lines into one heading
-    # block instead of prefixing "# " on each fragment separately — a
-    # heading that wraps across 2-3 short lines (common in narrow columns)
-    # should read as one heading, not several stacked "# " lines.
     output_lines = []
     buffer = []
     buffer_block_index = None
-    MAX_HEADING_WORDS = 20  # a merged heading block this long is almost never a real heading
+    MAX_HEADING_WORDS = 20
 
     def flush_buffer():
         nonlocal buffer_block_index
@@ -119,17 +112,12 @@ def _extract_structured_text(page, body_size: float) -> str:
             if len(merged_text.split()) <= MAX_HEADING_WORDS:
                 output_lines.append("# " + merged_text)
             else:
-                # too long after merging — likely a wrapped body paragraph/pull-quote,
-                # not a real heading, so emit the original lines as normal text
                 output_lines.extend(buffer)
             buffer.clear()
         buffer_block_index = None
 
     for entry in scored_lines:
         if entry["is_heading"]:
-            # a heading line from a different block than what's buffered means
-            # these are two distinct headings that just happen to be adjacent,
-            # not one heading wrapped across lines — flush before starting fresh
             if buffer and entry["block_index"] != buffer_block_index:
                 flush_buffer()
             buffer.append(entry["text"])

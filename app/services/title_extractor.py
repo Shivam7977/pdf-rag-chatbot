@@ -1,5 +1,4 @@
-import ollama
-from app.config import LLM_PROVIDER
+from app.services.llm import _chat_once
 
 
 def extract_display_title(first_page_text: str, fallback_filename: str) -> str:
@@ -11,7 +10,7 @@ def extract_display_title(first_page_text: str, fallback_filename: str) -> str:
     failure, since this is a nice-to-have, not something that should ever
     block an upload from succeeding.
     """
-    snippet = first_page_text[:1500]  # first page is plenty for a title
+    snippet = first_page_text[:1500]
 
     prompt = f"""Give this document a short, descriptive title (5-8 words) based on
 its actual topic/content. Return ONLY the title, nothing else — no quotes,
@@ -23,15 +22,7 @@ DOCUMENT TEXT:
 TITLE:"""
 
     try:
-        if LLM_PROVIDER == "ollama":
-            response = ollama.chat(
-                model="llama3.2",
-                messages=[{"role": "user", "content": prompt}],
-                options={"temperature": 0.2},
-            )
-            title = response["message"]["content"].strip().strip('"')
-            return title if title else fallback_filename
-        else:
-            return fallback_filename
+        title = _chat_once(prompt, temperature=0.2).strip('"')
+        return title if title else fallback_filename
     except Exception:
         return fallback_filename

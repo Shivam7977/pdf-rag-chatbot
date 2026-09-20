@@ -7,6 +7,7 @@ langchain-text-splitters
 sentence-transformers
 rank-bm25
 ollama
+groq
 python-multipart
 pydantic
 python-dotenv
@@ -21,4 +22,3 @@ email-validator
 resend
 pytesseract
 pillow
-mistralai

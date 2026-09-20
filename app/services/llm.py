@@ -1,13 +1,41 @@
 import ollama
-from app.config import LLM_PROVIDER
+from groq import Groq
+from app.config import LLM_PROVIDER, GROQ_API_KEY
 
 CONFIDENCE_HIGH_THRESHOLD = 0.0
+
+_groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+# Groq's currently-supported free-tier model. Check console.groq.com/docs/models
+# if this ever gets deprecated — Groq rotates model availability periodically.
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 
 def get_confidence_level(top_score: float) -> str:
     if top_score > CONFIDENCE_HIGH_THRESHOLD:
         return "high"
     return "low"
+
+
+def _chat_once(prompt: str, temperature: float = 0.1) -> str:
+    """Non-streaming single response — used for query rewriting and title
+    extraction, where we just need the final text, not a token stream."""
+    if LLM_PROVIDER == "ollama":
+        response = ollama.chat(
+            model="llama3.2",
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": temperature},
+        )
+        return response["message"]["content"].strip()
+    elif LLM_PROVIDER == "groq":
+        response = _groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+        )
+        return response.choices[0].message.content.strip()
+    else:
+        raise NotImplementedError(f"LLM provider '{LLM_PROVIDER}' not implemented yet")
 
 
 def rewrite_query(question: str, recent_history: list[dict]) -> str:
@@ -30,28 +58,34 @@ LATEST QUESTION: {question}
 
 STANDALONE QUESTION:"""
 
-    if LLM_PROVIDER == "ollama":
-        response = ollama.chat(
-            model="llama3.2",
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.1},
-        )
-        rewritten = response["message"]["content"].strip()
+    try:
+        rewritten = _chat_once(prompt)
         return rewritten if rewritten else question
-    else:
-        return question
+    except Exception:
+        return question  # fail open — never block a question over this
 
 
-def _stream_llm(prompt: str):
+def _stream_llm(prompt: str, temperature: float = 0.1):
     if LLM_PROVIDER == "ollama":
         stream = ollama.chat(
             model="llama3.2",
             messages=[{"role": "user", "content": prompt}],
             stream=True,
-            options={"temperature": 0.1}
+            options={"temperature": temperature},
         )
         for chunk in stream:
             content = chunk["message"]["content"]
+            if content:
+                yield content
+    elif LLM_PROVIDER == "groq":
+        stream = _groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            stream=True,
+        )
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
             if content:
                 yield content
     else:

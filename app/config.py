@@ -28,4 +28,6 @@ MAX_SINGLE_UPLOAD_BYTES = 20 * 1024 * 1024
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:8000")
 
 # --- LLM ---
+# "ollama" for local dev, "groq" for production (Render can't run Ollama).
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
