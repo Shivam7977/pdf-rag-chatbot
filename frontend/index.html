@@ -25,7 +25,8 @@
 
     <section class="hero">
       <div class="wrap hero-inner">
-        <h1 class="hero-title">Ask your documents.<br>Get answers with sources.</h1>
+        <span class="hero-eyebrow">✦ AI-Powered Document Analysis</span>
+        <h1 class="hero-title">Ask your documents.<br>Get answers <span class="accent">with sources</span>.</h1>
         <p class="hero-sub">Upload a PDF, ask a question in plain language, and get an answer built from the exact passages it came from — not a guess.</p>
         <div class="hero-actions">
           <a href="login.html" class="btn btn-primary">Get Started</a>
@@ -34,14 +35,41 @@
       </div>
     </section>
 
+    <section class="live-preview">
+      <div class="wrap">
+        <div class="live-preview-panel">
+          <p class="live-preview-label">What it looks like</p>
+          <div class="live-preview-grid">
+            <div class="live-preview-doc">
+              <svg class="live-preview-doc-icon" width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path d="M6 2h9l5 5v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                <path d="M14 2v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              </svg>
+              <p class="live-preview-doc-name">quarterly-outlook.pdf</p>
+              <p class="live-preview-doc-status">Indexed · 42 pages</p>
+              <div class="live-preview-doc-bar"><div class="live-preview-doc-bar-fill"></div></div>
+            </div>
+            <div class="live-preview-chat">
+              <div class="live-preview-msg user">What's the projected revenue growth for next year?</div>
+              <div class="live-preview-msg assistant">
+                Revenue is projected to grow 18% year-over-year, driven mainly by expansion into EMEA markets.<span class="cursor"></span>
+                <div class="live-preview-sources">
+                  <span class="source-chip">p. 14</span>
+                  <span class="source-chip">p. 15</span>
+                </div>
+                <span class="confidence-badge is-high">High confidence</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="capability-strip">
       <div class="wrap capability-inner">
         <span class="cap-item">Hybrid Search</span>
-        <span class="cap-dot">·</span>
         <span class="cap-item">Reranked Results</span>
-        <span class="cap-dot">·</span>
         <span class="cap-item">Streaming Answers</span>
-        <span class="cap-dot">·</span>
         <span class="cap-item">Cited Sources</span>
       </div>
     </section>
@@ -74,12 +102,30 @@
       <div class="wrap">
         <h2 class="section-title">What's under the hood</h2>
         <div class="feature-grid">
-          <div class="feature-card"><h3>Hybrid Search</h3><p>Combines keyword matching with meaning-based search so acronyms and exact terms are never missed.</p></div>
-          <div class="feature-card"><h3>Reranked Results</h3><p>A second pass re-orders the best-matching passages before they're used to answer, improving accuracy.</p></div>
-          <div class="feature-card"><h3>Streaming Answers</h3><p>Answers appear word by word as they're generated, instead of a long wait for a full response.</p></div>
-          <div class="feature-card"><h3>Page-Level Citations</h3><p>Every answer is followed by the document and page number it was actually drawn from.</p></div>
-          <div class="feature-card"><h3>Hallucination Guardrails</h3><p>If the document doesn't contain an answer, it says so — instead of making one up.</p></div>
-          <div class="feature-card"><h3>Multi-Document Support</h3><p>Upload more than one PDF and ask questions that span across all of them.</p></div>
+          <div class="feature-card">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6"/><path d="M17 17l-4.3-4.3"/></svg></span>
+            <h3>Hybrid Search</h3><p>Combines keyword matching with meaning-based search so acronyms and exact terms are never missed.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M4 10h8M4 14h4"/></svg></span>
+            <h3>Reranked Results</h3><p>A second pass re-orders the best-matching passages before they're used to answer, improving accuracy.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l4-4 3 3 6-6"/><path d="M12 4h4v4"/></svg></span>
+            <h3>Streaming Answers</h3><p>Answers appear word by word as they're generated, instead of a long wait for a full response.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 3h10v14l-5-3-5 3V3z"/></svg></span>
+            <h3>Page-Level Citations</h3><p>Every answer is followed by the document and page number it was actually drawn from.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10 2l7 3v5c0 4.5-3 7.5-7 8-4-0.5-7-3.5-7-8V5l7-3z"/><path d="M7 10l2 2 4-4" stroke-linecap="round"/></svg></span>
+            <h3>Hallucination Guardrails</h3><p>If the document doesn't contain an answer, it says so — instead of making one up.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10 3l7 4-7 4-7-4 7-4z"/><path d="M3 11l7 4 7-4"/><path d="M3 15l7 4 7-4"/></svg></span>
+            <h3>Multi-Document Support</h3><p>Upload more than one PDF and ask questions that span across all of them.</p>
+          </div>
         </div>
       </div>
     </section>

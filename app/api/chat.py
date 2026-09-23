@@ -56,7 +56,10 @@ def stream_chat_response(question: str, chat_session_id):
         ]
 
         search_query = rewrite_query(question, recent_history)
-        chunks, mode = retrieve_chunks(search_query, chat_session_id, db, top_k=5)
+        print(f"[DEBUG] original={question!r} rewritten={search_query!r}")
+        chunks, mode = retrieve_chunks(search_query, question, chat_session_id, db, top_k=5)
+        print(f"[DEBUG] mode={mode} top_score={chunks[0].get('rerank_score', 'N/A') if chunks else 'NO CHUNKS'} retrieved_section={chunks[0].get('section_title', 'N/A') if chunks else 'N/A'}")
+        print(f"[DEBUG] chunk_text={chunks[0].get('text', '')[:200]!r}" if chunks else "")
 
         def save_message(role: str, content: str, sources_json: str):
             db.add(models.Message(chat_session_id=chat_session_id, role=role, content=content, sources_json=sources_json))
@@ -68,7 +71,7 @@ def stream_chat_response(question: str, chat_session_id):
             db.commit()
 
         save_message("user", question, "[]")
-
+        print(f"[DEBUG] mode={mode} top_score={chunks[0].get('rerank_score', 'N/A') if chunks else 'NO CHUNKS'}")
         no_content = not chunks or (mode == "specific" and chunks[0]["rerank_score"] < RERANK_CONFIDENCE_THRESHOLD)
 
         if no_content:

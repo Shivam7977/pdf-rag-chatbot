@@ -3,6 +3,7 @@ from groq import Groq
 from app.config import LLM_PROVIDER, GROQ_API_KEY
 
 CONFIDENCE_HIGH_THRESHOLD = 0.0
+SHORT_QUERY_WORD_THRESHOLD = 4
 
 _groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
@@ -39,16 +40,39 @@ def _chat_once(prompt: str, temperature: float = 0.1) -> str:
 
 
 def rewrite_query(question: str, recent_history: list[dict]) -> str:
-    if not recent_history:
-        return question
+    """
+    Always runs now — not just when history exists. Two jobs:
+    1. Resolve references to prior context ("it", "that", "the decoder").
+    2. Turn bare keyword/short-phrase queries ("skills", "Oracle Corporation")
+       into natural-language questions, since the downstream cross-encoder
+       reranker is trained on question<->passage pairs and scores bare
+       keywords poorly even when the answer is clearly present.
+    """
+    is_short = len(question.split()) <= SHORT_QUERY_WORD_THRESHOLD
 
-    history_text = "\n".join(f"{h['role']}: {h['content']}" for h in recent_history)
+    if not recent_history and not is_short:
+        return question
+    
+    history_text = (
+        "\n".join(f"{h['role']}: {h['content']}" for h in recent_history)
+        if recent_history else "(no prior messages)"
+    )
 
     prompt = f"""Given this recent conversation, rewrite the LATEST question so it can
-be understood on its own, without needing the earlier messages for context.
-Only rewrite if the question actually depends on prior context (e.g. uses
-"it", "that", "the decoder" referring to something mentioned earlier).
-If the question is already standalone, return it UNCHANGED.
+be understood on its own, without needing the earlier messages for context,
+AND so it reads as a clear, natural-language question rather than a bare
+keyword or short phrase.
+
+Rules:
+- If the question depends on prior context (e.g. uses "it", "that", "the
+  decoder" referring to something mentioned earlier), resolve that reference
+  using the conversation.
+- If the question is just a bare word or short phrase (e.g. "skills",
+  "Oracle Corporation", "projects"), rewrite it into a natural question
+  asking what the document says about that topic (e.g. "What does the
+  document say about Oracle Corporation?").
+- If the question is already a clear, standalone, natural-language question,
+  return it UNCHANGED.
 Return ONLY the rewritten question, nothing else — no explanation.
 
 CONVERSATION SO FAR:
