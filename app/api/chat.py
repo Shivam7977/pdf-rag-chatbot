@@ -8,7 +8,7 @@ from app.db.database import get_db, SessionLocal
 from app.db import models
 from app.schemas.chat import ChatRequest
 from app.services.retriever import retrieve_chunks
-from app.services.llm import generate_answer, rewrite_query, get_confidence_level
+from app.services.llm import generate_answer, build_search_query, get_confidence_level
 from app.api.deps import get_current_user
 
 router = APIRouter()
@@ -55,7 +55,7 @@ def stream_chat_response(question: str, chat_session_id):
             for m in reversed(recent_messages)
         ]
 
-        search_query = rewrite_query(question, recent_history)
+        search_query = build_search_query(question, recent_history)
         print(f"[DEBUG] original={question!r} rewritten={search_query!r}")
         chunks, mode = retrieve_chunks(search_query, question, chat_session_id, db, top_k=5)
         print(f"[DEBUG] mode={mode} top_score={chunks[0].get('rerank_score', 'N/A') if chunks else 'NO CHUNKS'} retrieved_section={chunks[0].get('section_title', 'N/A') if chunks else 'N/A'}")
@@ -97,9 +97,20 @@ def stream_chat_response(question: str, chat_session_id):
 
         print(f"[DEBUG] num_chunks_sent_to_llm={len(filtered_chunks)} sections={[c.get('section_title') for c in filtered_chunks]}")
 
+        # Broad-mode retrieval (get_spread_chunks) never consumes
+        # search_query — it just spreads chunks across the whole document
+        # regardless of query text — so using the templated/resolved
+        # search_query here only risks feeding the LLM a mangled version of
+        # an already-clear question (e.g. "summary of the document" could
+        # become a circular phrasing) with zero retrieval benefit. Use the
+        # original question for generation in broad mode; specific mode
+        # still benefits from search_query (needed for bare keyword queries
+        # like "Oracle Corporation").
+        generation_query = question if mode == "broad" else search_query
+
         answer_text = ""
         try:
-            for token in generate_answer(search_query, filtered_chunks, mode=mode):
+            for token in generate_answer(generation_query, filtered_chunks, mode=mode):
                 answer_text += token
                 yield sse_event("token", {"content": token})
 

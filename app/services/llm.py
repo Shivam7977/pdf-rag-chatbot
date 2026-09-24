@@ -1,9 +1,24 @@
+import re
 import ollama
 from groq import Groq
 from app.config import LLM_PROVIDER, GROQ_API_KEY
 
 CONFIDENCE_HIGH_THRESHOLD = 0.0
 SHORT_QUERY_WORD_THRESHOLD = 4
+
+QUESTION_WORDS = {"what", "who", "how", "why", "when", "where", "which"}
+ACTION_WORDS = {
+    "summarize", "summarise", "summary",
+    "explain", "describe",
+    "compare", "contrast",
+    "list", "show",
+    "tell", "give",
+    "define", "definition",
+    "extract", "find",
+    "identify", "mention",
+    "provide", "details", "overview",
+}
+REFERENCE_WORDS = {"it", "that", "this", "he", "she", "they", "him", "her", "them", "its", "his", "their"}
 
 _groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
@@ -19,8 +34,9 @@ def get_confidence_level(top_score: float) -> str:
 
 
 def _chat_once(prompt: str, temperature: float = 0.1) -> str:
-    """Non-streaming single response — used for query rewriting and title
-    extraction, where we just need the final text, not a token stream."""
+    """Non-streaming single response — used for reference resolution and
+    title extraction, where we just need the final text, not a token
+    stream."""
     if LLM_PROVIDER == "ollama":
         response = ollama.chat(
             model="llama3.2",
@@ -39,40 +55,26 @@ def _chat_once(prompt: str, temperature: float = 0.1) -> str:
         raise NotImplementedError(f"LLM provider '{LLM_PROVIDER}' not implemented yet")
 
 
-def rewrite_query(question: str, recent_history: list[dict]) -> str:
+def _normalize_words(question: str) -> list[str]:
+    return [w.strip(".,!?;:\"'()[]{}").lower() for w in question.strip().split()]
+
+
+def _resolve_reference(question: str, recent_history: list[dict]) -> str:
     """
-    Always runs now — not just when history exists. Two jobs:
-    1. Resolve references to prior context ("it", "that", "the decoder").
-    2. Turn bare keyword/short-phrase queries ("skills", "Oracle Corporation")
-       into natural-language questions, since the downstream cross-encoder
-       reranker is trained on question<->passage pairs and scores bare
-       keywords poorly even when the answer is clearly present.
+    LLM call used ONLY to resolve a pronoun/reference-based follow-up
+    ("what about it", "tell me more about that", "and when did that
+    happen") against the recent conversation — NOT to rephrase or
+    "improve" the question otherwise. Kept as its own narrow step, separate
+    from the deterministic templating below, so it can never touch a
+    question that doesn't actually need it.
     """
-    is_short = len(question.split()) <= SHORT_QUERY_WORD_THRESHOLD
+    history_text = "\n".join(f"{h['role']}: {h['content']}" for h in recent_history)
 
-    if not recent_history and not is_short:
-        return question
-    
-    history_text = (
-        "\n".join(f"{h['role']}: {h['content']}" for h in recent_history)
-        if recent_history else "(no prior messages)"
-    )
-
-    prompt = f"""Given this recent conversation, rewrite the LATEST question so it can
-be understood on its own, without needing the earlier messages for context,
-AND so it reads as a clear, natural-language question rather than a bare
-keyword or short phrase.
-
-Rules:
-- If the question depends on prior context (e.g. uses "it", "that", "the
-  decoder" referring to something mentioned earlier), resolve that reference
-  using the conversation.
-- If the question is just a bare word or short phrase (e.g. "skills",
-  "Oracle Corporation", "projects"), rewrite it into a natural question
-  asking what the document says about that topic (e.g. "What does the
-  document say about Oracle Corporation?").
-- If the question is already a clear, standalone, natural-language question,
-  return it UNCHANGED.
+    prompt = f"""The LATEST question below uses a reference word ("it", "that",
+"he", "they", etc.) that refers to something mentioned earlier in the
+conversation. Rewrite ONLY to replace that reference with what it actually
+refers to, based on the conversation. Do not change anything else about the
+question's wording or add extra phrasing.
 Return ONLY the rewritten question, nothing else — no explanation.
 
 CONVERSATION SO FAR:
@@ -80,13 +82,55 @@ CONVERSATION SO FAR:
 
 LATEST QUESTION: {question}
 
-STANDALONE QUESTION:"""
+RESOLVED QUESTION:"""
 
     try:
-        rewritten = _chat_once(prompt)
-        return rewritten if rewritten else question
+        resolved = _chat_once(prompt)
+        return resolved if resolved else question
     except Exception:
         return question  # fail open — never block a question over this
+
+
+def build_search_query(question: str, recent_history: list[dict]) -> str:
+    """
+    Decides what to actually search with — NOT a general rewriter. Four
+    outcomes, checked in order:
+    1. Empty/whitespace question -> returned as-is (caller/validation
+       handles rejecting it).
+    2. Contains a reference word ("it", "that", "he"...) AND there's prior
+       history -> resolve the reference via a narrow, single-purpose LLM
+       call (see _resolve_reference). This is the only case that touches
+       the LLM.
+    3. Contains a question-word (what/who/why/how...) or an action-word
+       (summarize/compare/list/tell/give...), OR is longer than
+       SHORT_QUERY_WORD_THRESHOLD words -> already a natural/well-formed
+       query (or an action/broad-mode query that doesn't need templating
+       at all) -> returned UNCHANGED. This is deliberately conservative:
+       we only transform a query when we have strong evidence doing so
+       will help, never as a default.
+    4. Otherwise: a short, bare noun/topic phrase ("skills", "Oracle
+       Corporation", "Oracle projects") -> wrapped in a deterministic
+       template so the downstream cross-encoder reranker (trained on
+       question<->passage pairs, scores bare keywords poorly) has
+       something to work with. No LLM call — fully predictable output,
+       can never come back garbled.
+    """
+    question = question.strip()
+    if not question:
+        return question
+
+    words = _normalize_words(question)
+
+    if recent_history and any(w in REFERENCE_WORDS for w in words):
+        return _resolve_reference(question, recent_history)
+
+    has_question_or_action_word = any(w in QUESTION_WORDS or w in ACTION_WORDS for w in words)
+    is_short = len(words) <= SHORT_QUERY_WORD_THRESHOLD
+
+    if has_question_or_action_word or not is_short:
+        return question
+
+    return f"What does the document say about {question}?"
 
 
 def _stream_llm(prompt: str, temperature: float = 0.1):
