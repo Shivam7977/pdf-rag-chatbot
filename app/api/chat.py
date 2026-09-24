@@ -71,7 +71,7 @@ def stream_chat_response(question: str, chat_session_id):
             db.commit()
 
         save_message("user", question, "[]")
-        print(f"[DEBUG] mode={mode} top_score={chunks[0].get('rerank_score', 'N/A') if chunks else 'NO CHUNKS'}")
+
         no_content = not chunks or (mode == "specific" and chunks[0]["rerank_score"] < RERANK_CONFIDENCE_THRESHOLD)
 
         if no_content:
@@ -84,15 +84,28 @@ def stream_chat_response(question: str, chat_session_id):
 
         confidence = get_confidence_level(chunks[0]["rerank_score"]) if mode == "specific" else None
 
+        # Drop weak-scoring chunks before they ever reach the LLM. A small
+        # local/free-tier model can get confused and hedge into "couldn't
+        # find this" when it sees several unrelated sections mixed into the
+        # same context, even if the top chunk clearly answers the question —
+        # telling it via prompt instruction to "ignore irrelevant sections"
+        # wasn't reliable enough on its own, so filter at the source instead.
+        if mode == "specific":
+            filtered_chunks = [c for c in chunks if c["rerank_score"] >= RERANK_CONFIDENCE_THRESHOLD]
+        else:
+            filtered_chunks = chunks
+
+        print(f"[DEBUG] num_chunks_sent_to_llm={len(filtered_chunks)} sections={[c.get('section_title') for c in filtered_chunks]}")
+
         answer_text = ""
         try:
-            for token in generate_answer(question, chunks, mode=mode):
+            for token in generate_answer(search_query, filtered_chunks, mode=mode):
                 answer_text += token
                 yield sse_event("token", {"content": token})
 
             yield sse_event("done", {})
 
-            flat_chunks = _flatten_for_sources(chunks)
+            flat_chunks = _flatten_for_sources(filtered_chunks)
             seen = set()
             sources_out = []
             for c in flat_chunks:

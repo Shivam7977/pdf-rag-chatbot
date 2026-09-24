@@ -123,6 +123,11 @@ Do not add assumptions, recommendations, opinions, or outside knowledge.
 If the answer is not present in the context, say
 "I couldn't find this in the uploaded documents."
 
+The context below may include multiple sections from the document, not all
+of which are relevant to the question. Identify and use ONLY the part(s)
+that actually answer the question; ignore unrelated sections rather than
+treating their presence as reason to say the answer wasn't found.
+
 Do NOT include inline citations, source filenames, or page numbers in your
 answer text — the sources are already shown separately in the interface.
 Do NOT add your own headings, document names, or "===" style markers —
@@ -138,6 +143,7 @@ IMPORTANT:
   translating each word separately).
 - Explain the meaning naturally in the target language, rather than
   doing a literal word-for-word translation.
+
 
 CONTEXT:
 {context_text}
